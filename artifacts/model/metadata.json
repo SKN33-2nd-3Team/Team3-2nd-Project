@@ -1,0 +1,16 @@
+{
+  "model": "gradient_boosting",
+  "selection_rule": "lowest Validation expected cost with FN:FP=3:1, then PR-AUC, then Recall; provisional and awaiting user approval",
+  "false_negative_cost": 3.0,
+  "false_positive_cost": 1.0,
+  "validation_threshold": 0.36999999999999994,
+  "train_rows": 24600,
+  "validation_rows": 8200,
+  "test_rows": 8200,
+  "random_state": 42,
+  "split": {
+    "train": 0.6,
+    "validation": 0.2,
+    "test": 0.2
+  }
+}

@@ -1,0 +1,16 @@
+# Generated documentation and runtime logs.
+docs/
+logs/
+ml_runs/
+PROJECT_REGISTER.md
+
+# Python caches and local tooling state.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/
+
+# Local environment files.
+.env
+.venv/
+venv/
