@@ -10,11 +10,6 @@
 
 ## 1. 빠른 실행
 
-작업 루트는 이 디렉토리입니다.
-
-```powershell
-cd "C:\SKN_33th_project\_project_\2차-머신러닝\try_4_music"
-
 # 재현 가능한 EDA·모델 비교·artifact 생성
 python -m src.run_pipeline
 
@@ -76,14 +71,6 @@ FN 비용을 FP보다 높게 보는 요구사항을 반영해 임시 `FN:FP = 3:
 
 ## 7. 산출물 위치
 
-- 요구사항 등록부: `PROJECT_REGISTER.md`
-- PRD: `docs/PRD.md`
-- Data Card: `docs/DATA_CARD.md`
-- Data Dictionary: `docs/DATA_DICTIONARY.md`
-- 전처리 보고서: `docs/PREPROCESSING_REPORT.md`
-- EDA 보고서: `docs/EDA_REPORT.md`
-- 검증 계획: `docs/VALIDATION_PLAN.md`
-- 요구사항 추적 매트릭스: `docs/REQUIREMENTS_TRACEABILITY_MATRIX.md`
 - 모델 비교: `artifacts/model_comparison.csv`
 - 모델 보고서: `artifacts/model_report.md`
 - 모델 해석: `artifacts/feature_importance.csv`, `artifacts/eda/feature_importance.png`
