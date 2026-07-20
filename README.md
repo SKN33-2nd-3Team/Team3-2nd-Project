@@ -1,4 +1,4 @@
-# try_4_music — PlaylistPro Insight
+# music — PlaylistPro Insight
 
 음악 스트리밍 서비스의 고객 이탈 위험을 분석하고, 우선 검토 고객을 식별하는 Light-mode 머신러닝 프로젝트입니다.
 
