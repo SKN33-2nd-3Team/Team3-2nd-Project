@@ -1,0 +1,219 @@
+{
+  "model": "gradient_boosting",
+  "selection_rule": "lowest Validation expected cost with FN:FP=3:1, then PR-AUC, then Recall; provisional and awaiting user approval",
+  "false_negative_cost": 3.0,
+  "false_positive_cost": 1.0,
+  "validation_threshold": 0.36999999999999994,
+  "train_rows": 24600,
+  "validation_rows": 8200,
+  "test_rows": 8200,
+  "random_state": 42,
+  "split": {
+    "train": 0.6,
+    "validation": 0.2,
+    "test": 0.2
+  },
+  "source_files": {
+    "train": {
+      "path": "data/train.csv",
+      "sha256": "57e99d823f3c2077b9df3ff7eb608f5c3d08be0e0128aae59e0ac70bf72eb317"
+    },
+    "test": {
+      "path": "data/test.csv",
+      "sha256": "22f9e72db486b27acd7c3a2baaada8e5279b4e60593a9a6b4af658bf6a036c7c"
+    }
+  },
+  "eda": {
+    "train_shape": [
+      41000,
+      20
+    ],
+    "test_shape": [
+      9999,
+      19
+    ],
+    "missing_values_train": 0,
+    "missing_values_test": 0,
+    "duplicate_rows_train": 0,
+    "duplicate_rows_test": 0,
+    "target_counts": {
+      "0": 32253,
+      "1": 8747
+    },
+    "target_rate": 0.21334146341463414,
+    "numeric_correlations": {
+      "age": -0.014317762330112083,
+      "average_session_length": -0.011873252792105795,
+      "weekly_songs_played": -0.0057390023481977805,
+      "weekly_unique_songs": -0.0053937792860376055,
+      "num_favorite_artists": -0.004909352060983774,
+      "weekly_hours": -0.004224321723348831,
+      "num_platform_friends": -0.004065931324810902,
+      "num_shared_playlists": 0.0034639861025763173,
+      "num_playlists_created": 0.006725321621473666,
+      "song_skip_rate": 0.009507171006559284,
+      "notifications_clicked": 0.020962270156493462
+    },
+    "categorical_churn_rates": {
+      "location": {
+        "North Carolina": {
+          "churn_rate": 0.23087621696801114,
+          "n": 2157
+        },
+        "New Jersey": {
+          "churn_rate": 0.22409858512094935,
+          "n": 2191
+        },
+        "Washington": {
+          "churn_rate": 0.2233318202451203,
+          "n": 2203
+        },
+        "Nebrasksa": {
+          "churn_rate": 0.22090909090909092,
+          "n": 2200
+        },
+        "Montana": {
+          "churn_rate": 0.21850302185030218,
+          "n": 2151
+        },
+        "Wisconsin": {
+          "churn_rate": 0.2173711100789596,
+          "n": 2153
+        },
+        "South Carolina": {
+          "churn_rate": 0.21720733427362482,
+          "n": 2127
+        },
+        "New York": {
+          "churn_rate": 0.21543985637342908,
+          "n": 2228
+        },
+        "Utah": {
+          "churn_rate": 0.2151189920671955,
+          "n": 2143
+        },
+        "Alabama": {
+          "churn_rate": 0.2137367915465898,
+          "n": 2082
+        },
+        "Maine": {
+          "churn_rate": 0.21257625527921165,
+          "n": 2131
+        },
+        "Virginia": {
+          "churn_rate": 0.2124765478424015,
+          "n": 2132
+        },
+        "West Virginia": {
+          "churn_rate": 0.21089385474860337,
+          "n": 2148
+        },
+        "Florida": {
+          "churn_rate": 0.20973782771535582,
+          "n": 2136
+        },
+        "California": {
+          "churn_rate": 0.20801526717557253,
+          "n": 2096
+        },
+        "Vermont": {
+          "churn_rate": 0.20573277854831254,
+          "n": 2163
+        },
+        "Idaho": {
+          "churn_rate": 0.20082530949105915,
+          "n": 2181
+        },
+        "North Dakota": {
+          "churn_rate": 0.19844179651695693,
+          "n": 2182
+        },
+        "Georgia": {
+          "churn_rate": 0.19808743169398907,
+          "n": 2196
+        }
+      },
+      "subscription_type": {
+        "student": {
+          "churn_rate": 0.3243953732912723,
+          "n": 3804
+        },
+        "premium": {
+          "churn_rate": 0.2581453634085213,
+          "n": 9576
+        },
+        "basic": {
+          "churn_rate": 0.18819156293222683,
+          "n": 11568
+        },
+        "family premium": {
+          "churn_rate": 0.1784201345626713,
+          "n": 16052
+        }
+      },
+      "payment_plan": {
+        "monthly": {
+          "churn_rate": 0.3688371679843653,
+          "n": 11257
+        },
+        "annual": {
+          "churn_rate": 0.1544901321319302,
+          "n": 29743
+        }
+      },
+      "num_subscription_pauses": {
+        "monthly": {
+          "churn_rate": 0.2516580357954029,
+          "n": 11007
+        },
+        "annual": {
+          "churn_rate": 0.19927983196079085,
+          "n": 29993
+        }
+      },
+      "payment_method": {
+        "debit": {
+          "churn_rate": 0.2175684853973285,
+          "n": 13251
+        },
+        "venmo": {
+          "churn_rate": 0.21422091177137673,
+          "n": 8818
+        },
+        "credit": {
+          "churn_rate": 0.20997306006021868,
+          "n": 18931
+        }
+      },
+      "customer_service_inquiries": {
+        "none": {
+          "churn_rate": 0.21588183310188108,
+          "n": 7921
+        },
+        "many": {
+          "churn_rate": 0.2140786269279833,
+          "n": 8623
+        },
+        "some": {
+          "churn_rate": 0.21266220348789155,
+          "n": 12099
+        },
+        "few": {
+          "churn_rate": 0.21186372096787245,
+          "n": 12357
+        }
+      }
+    },
+    "chart_count": 20
+  },
+  "artifacts": [
+    "artifacts/eda_summary.json",
+    "artifacts/model_comparison.csv",
+    "artifacts/threshold_sweep_validation.csv",
+    "artifacts/feature_importance.csv",
+    "artifacts/eda/feature_importance.png",
+    "artifacts/test_predictions.csv",
+    "artifacts/model/music_churn_pipeline.joblib",
+    "artifacts/model/metadata.json"
+  ]
+}
