@@ -156,7 +156,7 @@ streamlit run app/streamlit_app.py
 1. **규칙 기반 합성 데이터로 판정했습니다.** Test PR-AUC 0.9473은 생성 규칙 복원 성능이며 실제 서비스 일반화 성능이 아닙니다.
 2. 관측 기준일·해지일이 없어 예측 시점과 결과 기간을 검증할 수 없습니다.
 3. `weekly_unique_songs > weekly_songs_played`가 29.6%, `num_shared_playlists > num_playlists_created`가 24.6%입니다. 현행 Pipeline은 이 컬럼들을 입력으로 사용하지만 중요도가 거의 없으므로, 향후 제거 실험과 입력 화면 축소가 필요합니다.
-4. FN:FP `3:1`과 LTV 120,000원은 팀 가정입니다. 실제 사업 단가로 다시 승인·산정해야 합니다.
+4. FN:FP `3:1`과 요금제별 고객 가치·접촉 비용은 **전부 팀 가정**입니다. 데이터에 금액 컬럼이 하나도 없어 국내 시세를 참조했습니다. 산출 근거와 민감도는 [docs/campaign_assumptions.md](docs/campaign_assumptions.md)에 있으며, 실제 사업 단가로 다시 승인·산정해야 합니다.
 5. 모델 관계는 연관성만 보여주며 캠페인 효과를 보장하지 않습니다.
 
 ## 9. 제출 산출물

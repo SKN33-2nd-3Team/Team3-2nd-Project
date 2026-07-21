@@ -23,6 +23,16 @@ ARTIFACT_DIR = ROOT / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model" / "music_churn_pipeline.joblib"
 METADATA_PATH = ARTIFACT_DIR / "model" / "metadata.json"
 
+# Campaign Simulator defaults. Derived in docs/campaign_assumptions.md from Korean
+# music-streaming list prices; every figure is an assumption, not observed data.
+# Value is annual CONTRIBUTION MARGIN (revenue x 30%), because royalties take ~70%
+# of revenue and retention ROI has to be judged on margin.
+PLAN_ANNUAL_MARGIN = {"Family": 60_840, "Premium": 39_240, "Student": 19_620, "Free": 7_200}
+# Mid-cost channel: LMS + one month at 50% off, charged as margin forgone.
+PLAN_CONTACT_COST = {"Family": 2_565, "Premium": 1_665, "Student": 848, "Free": 330}
+DEFAULT_SUCCESS_RATE = 15  # %
+FALLBACK_MARGIN, FALLBACK_COST = 39_240, 1_665
+
 st.set_page_config(
     page_title="PlaylistPro Insight",
     page_icon="♫",
@@ -427,7 +437,11 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
     header("Campaign Simulator", "예산·인원·상위 % 중 원하는 기준으로 캠페인 규모를 정하면, 고객별 예측 확률 순위로 기대 효과를 계산합니다.")
     st.markdown(
         '<div class="note-card"><b>설계 원칙</b><br>접촉 비용·고객 가치·방어 성공률은 마케팅 담당자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
-        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음).</div>',
+        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음).<br>'
+        '<b>기본값 출처</b> — 국내 음악 스트리밍 시세 기준 요금제별 가정값입니다. '
+        '고객 가치는 매출이 아니라 <b>연 기여이익</b>(매출 × 30%)입니다. 음원 저작권료가 매출의 약 70%를 가져가므로, '
+        '리텐션 ROI는 기여이익으로 판단해야 합니다. 접촉 비용은 중비용 채널(LMS + 1개월 50% 할인)을 기여이익 손실로 환산한 값입니다. '
+        '산출 근거는 <code>docs/campaign_assumptions.md</code> 참고.</div>',
         unsafe_allow_html=True,
     )
 
@@ -457,7 +471,7 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
 
     col_sr, col_sort = st.columns([1.4, 1])
     with col_sr:
-        success_rate = st.slider("방어 성공률 (%)", 5, 50, 20, 5) / 100.0
+        success_rate = st.slider("방어 성공률 (%)", 5, 50, DEFAULT_SUCCESS_RATE, 5) / 100.0
 
     kpi_box = st.container()
 
@@ -471,16 +485,23 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
                 "보유 고객": [int(counts.loc[p, "size"]) for p in plan_list],
                 "평균 위험도": [f"{counts.loc[p, 'mean']:.1%}" for p in plan_list],
                 "포함": True,
-                "접촉 비용(원)": 3000,
-                "고객 가치(원/년)": 120000,
+                "접촉 비용(원)": [PLAN_CONTACT_COST.get(p, FALLBACK_COST) for p in plan_list],
+                "고객 가치(원/년)": [PLAN_ANNUAL_MARGIN.get(p, FALLBACK_MARGIN) for p in plan_list],
+                "손익분기 확률": [
+                    f"{PLAN_CONTACT_COST.get(p, FALLBACK_COST) / (PLAN_ANNUAL_MARGIN.get(p, FALLBACK_MARGIN) * success_rate):.0%}"
+                    for p in plan_list
+                ],
             }
         ),
         hide_index=True,
-        disabled=["요금제", "보유 고객", "평균 위험도"],
+        disabled=["요금제", "보유 고객", "평균 위험도", "손익분기 확률"],
         column_config={
             "포함": st.column_config.CheckboxColumn("포함"),
-            "접촉 비용(원)": st.column_config.NumberColumn("접촉 비용(원)", min_value=0, step=500),
-            "고객 가치(원/년)": st.column_config.NumberColumn("고객 가치(원/년)", min_value=0, step=10000),
+            "접촉 비용(원)": st.column_config.NumberColumn("접촉 비용(원)", min_value=0, step=100),
+            "고객 가치(원/년)": st.column_config.NumberColumn("고객 가치(원/년)", min_value=0, step=1000),
+            "손익분기 확률": st.column_config.TextColumn(
+                "손익분기 확률", help="접촉 비용 / (고객 가치 × 성공률). 이 확률보다 낮은 고객은 접촉해도 손해입니다."
+            ),
         },
         width="stretch",
     ).set_index("요금제")
