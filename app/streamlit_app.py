@@ -592,7 +592,14 @@ def model_selection_page(fair_comparison: pd.DataFrame, candidate: dict, decisio
     st.warning("최고 OOF Baseline을 최종 운영 모델이라고 말하면 안 됩니다. 더 넓은 공정 비교 Workflow는 아직 완료되지 않았습니다.")
 
 
-def operations_page(targeting: pd.DataFrame, deciles: pd.DataFrame, scenarios: pd.DataFrame, active_scenario: pd.Series):
+def operations_page(targeting: pd.DataFrame, deciles: pd.DataFrame, scenarios: pd.DataFrame):
+    scenario_ids = scenarios["scenario_id"].tolist()
+    selected_id = st.selectbox(
+        "비교할 운영 시나리오",
+        scenario_ids,
+        format_func=lambda scenario_id: scenario_label(get_scenario(scenarios, scenario_id)),
+    )
+    active_scenario = get_scenario(scenarios, selected_id)
     header("운영 시나리오", "사업 담당자가 Threshold를 고르기 전에 연락 대상 범위와 성능 Trade-off를 보여줍니다.")
     st.markdown(
         f'<div class="note-card"><b>선택 시나리오: {active_scenario["scenario_label"]}</b><br>'
@@ -887,6 +894,15 @@ def prioritization_page(
     active_scenario: pd.Series,
 ):
     header("Customer Prioritization", "개별 고객 확인과 무라벨 제공 test 고객의 배치 우선순위를 한 곳에서 검토합니다.")
+    scenario_ids = scenarios["scenario_id"].tolist()
+    selected_id = st.selectbox(
+        "고객 우선순위 판단 기준",
+        scenario_ids,
+        index=scenario_ids.index(active_scenario["scenario_id"]) if active_scenario["scenario_id"] in scenario_ids else 0,
+        format_func=lambda scenario_id: scenario_label(get_scenario(scenarios, scenario_id)),
+        help="이 화면에서만 적용되는 위험 등급·대상 판단 기준입니다.",
+    )
+    active_scenario = get_scenario(scenarios, selected_id)
     scoring_tab, batch_tab = st.tabs(["개별 고객 점수", "배치 우선순위"])
     with scoring_tab:
         prediction_page(train, model, metadata, scenarios, active_scenario, show_header=False)
@@ -1090,8 +1106,7 @@ def main():
     (train, test), model, (comparison, threshold, metadata, predictions, importance, targeting, deciles, scenarios) = safe_load()
     candidate, progression, decision_matrix, insights, fair_comparison = load_presentation_evidence()
     default_scenario_id = metadata.get("app_default_scenario_id", "balanced_f1")
-    scenario_ids = scenarios["scenario_id"].tolist()
-    default_index = scenario_ids.index(default_scenario_id) if default_scenario_id in scenario_ids else 0
+    active_scenario = get_scenario(scenarios, default_scenario_id)
     with st.sidebar:
         st.markdown('<div class="brand"><span class="brand-mark">♫</span><span class="brand-name">PlaylistPro</span></div>', unsafe_allow_html=True)
         st.caption("분석 워크스페이스")
@@ -1102,14 +1117,6 @@ def main():
         )
         st.divider()
         st.markdown(f"**데모 모델**  `{metadata['model']}`")
-        active_id = st.selectbox(
-            "운영 시나리오",
-            scenario_ids,
-            index=default_index,
-            format_func=lambda scenario_id: scenario_label(get_scenario(scenarios, scenario_id)),
-        )
-        active_scenario = get_scenario(scenarios, active_id)
-        st.markdown(f"**임계값**  `{float(active_scenario['threshold']):.2f}`")
         if candidate:
             st.markdown(f"**후보 모델**  `{str(candidate.get('candidate_model', 'unknown')).upper()}`")
             candidate_status = str(candidate.get("status", "UNKNOWN"))
@@ -1131,7 +1138,7 @@ def main():
     elif page == "모델 비교·선정":
         model_selection_page(fair_comparison, candidate, decision_matrix)
     elif page == "운영 시나리오":
-        operations_page(targeting, deciles, scenarios, active_scenario)
+        operations_page(targeting, deciles, scenarios)
     else:
         prioritization_page(train, model, metadata, predictions, scenarios, active_scenario)
 
