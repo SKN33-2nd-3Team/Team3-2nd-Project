@@ -3,29 +3,42 @@
 > 가이드 §②(데이터 수집과 구조 설계)의 필수 기록 7항목.
 > 최종 갱신 2026-07-21. 컬럼 정의는 [data_dictionary.md](data_dictionary.md) 참조.
 
-## ⚠️ 미기재 항목 — 발표 전 팀 확인 필요
-
-신규 데이터셋으로 교체(커밋 `2effdcd`)하면서 아래 3개가 기록되지 않았다. **가이드 §② 필수 기록 항목이므로 반드시 채워야 한다.**
-
-| 항목 | 상태 |
-|---|---|
-| **정확한 출처 URL** | ❌ 미기재 — 누가 어디서 받았는지 기록 없음 |
-| **다운로드 날짜** | ❌ 미기재 (파일 타임스탬프상 2026-07-21 추정이나 확증 없음) |
-| **라이선스** | ❌ 미기재 |
-
-> 구 데이터셋(41,000행)의 출처는 [Music Streaming Customer Churn Dataset — Kaggle](https://www.kaggle.com/datasets/daliado98/music-streaming-customer-churn-dataset)이었다. 신규 데이터셋은 컬럼 구성이 유사하나 **행 수·값 분포·요금제 수준이 모두 다르므로 동일 출처로 간주할 수 없다.** 확인 없이 위 URL을 신규 데이터 출처로 기재하지 말 것.
-
 ## 필수 기록 항목
 
 | 항목 | 내용 |
 |---|---|
-| **출처** | ⚠️ 위 표 참조 (미기재) |
+| **출처** | [Streaming Subscription Churn Model — Kaggle Community Prediction Competition](https://www.kaggle.com/competitions/streaming-subscription-churn-model/data) (주최 Michael O'Donnell, 약 2년 전 개최, 현재 Late Submission 상태) |
+| **다운로드 날짜** | **2026-07-21 약 15:00** (팀원 확인 + 로컬 파일 타임스탬프 15:11로 교차 검증) |
+| **라이선스** | **MIT** (캐글 페이지 Metadata 표기). 단, 원본 다운로드에는 competition rules 동의가 필요하다 |
 | **데이터 단위** | 고객 1명 = 1행. `customer_id` 고유값 = 행 수로 검증 완료 |
 | **키** | `customer_id`. train 1 ~ 125,000 / test 200,000 ~ 274,999, **교집합 0건** |
-| **Target** | `churned` — 데이터셋이 **기존 컬럼으로 제공**. 팀이 생성한 파생 라벨이 아님 |
-| **실제 / 합성** | 🔴 **규칙 기반 합성으로 판정** (아래 근거 참조) |
+| **Target** | `churned` — 대회가 **기존 컬럼으로 제공**. 팀이 생성한 파생 라벨이 아님. 공식 정의 "0 = active, 1 = churned" |
+| **실제 / 합성** | 🔴 **규칙 기반 합성으로 판정** (대회 페이지에 명시 없음, 아래 근거는 팀 자체 분석) |
 | **개인정보** | 없음. 이름·연락처·이메일·정밀 위치 컬럼 부재. `location`은 미국 주(州) 단위로 식별 위험 낮음 |
 | **규모** | train 125,000 × 20 (14.0 MB) / test 75,000 × 19 (8.5 MB). 메모리 약 40 MB |
+
+### 출처 일치 검증
+
+대회 페이지 표기와 로컬 파일을 대조해 동일 출처임을 확인했다.
+
+| 항목 | 캐글 페이지 | 로컬 파일 | 판정 |
+|---|---|---|---|
+| 총 용량 | 23.35 MB | 14,644,350 + 8,703,281 = 23,347,631 B = **23.35 MB** | ✅ 일치 |
+| 컬럼 수 (3파일 합) | 41 | train 20 + test 19 + sample_submission 2 = **41** | ✅ 일치 |
+| 파일 구성 | `train.csv`, `test.csv`, `sample_submission.csv` | `train.csv`, `test.csv` (submission 미사용) | ✅ 일치 |
+| 컬럼명 20종 | 페이지 명세와 동일 | 동일 | ✅ 일치 |
+
+> ℹ️ 구 데이터셋(41,000행)은 다른 출처([Music Streaming Customer Churn Dataset — Kaggle Datasets](https://www.kaggle.com/datasets/daliado98/music-streaming-customer-churn-dataset))였다. 커밋 `2effdcd`에서 위 대회 데이터로 교체되었다.
+
+### ⚠️ 공식 컬럼 설명과 실제 값의 불일치
+
+대회 페이지의 컬럼 설명 중 **3개가 실제 데이터와 맞지 않는다.** 데이터가 문서를 따르지 않는다는 사실 자체가 합성 판정의 방증이며, 발표 시 컬럼 의미를 단정하지 않는 근거가 된다.
+
+| 컬럼 | 대회 페이지 설명 | 실제 값 | 처리 |
+|---|---|---|---|
+| `num_subscription_pauses` | 일시정지 횟수 **(max 2)** | **0 ~ 4** (3·4회가 49,694건) | 실제 값 기준으로 사용. 문턱값 3회는 실측 |
+| `signup_date` | 가입 **날짜(date)** | **음수 정수** −2,922 ~ −1 (기준일 대비 일수) | 날짜 파싱 불가. 파생 `signup_days_ago`만 사용 |
+| `average_session_length` | 세션 길이 **(단위: 시간)** | 1.0 ~ 120.0 | 세션 120시간은 비현실적. **단위 미상**으로 처리하며 어차피 노이즈로 판정되어 모델에서 제외됨 |
 
 ## 파일 버전 (SHA-256)
 

@@ -13,12 +13,12 @@
 | `location` | str | 19 | Alabama, California, … | 미국 주(州) | 노이즈 (스프레드 0.016) |
 | `subscription_type` | str | 4 | Free, Student, Family, Premium | 요금제 등급 | **신호** (스프레드 0.455) |
 | `payment_plan` | str | 2 | Monthly, Yearly | 결제 주기 | 노이즈 (**스프레드 0.001**) |
-| `num_subscription_pauses` | int64 | 5 | 0 ~ 4 | 구독 일시정지 횟수 | **신호** (문턱 3회) |
+| `num_subscription_pauses` | int64 | 5 | 0 ~ 4 | 구독 일시정지 횟수. ⚠️ 대회 문서는 "max 2"라 하나 실제는 4까지 | **신호** (문턱 3회) |
 | `payment_method` | str | 4 | Apple Pay, Credit Card, Debit Card, Paypal | 결제 수단 | 노이즈 (0.011) |
 | `customer_service_inquiries` | str | 3 | Low, Medium, High | 고객센터 문의 빈도 등급 | **신호** (스프레드 0.454) |
-| `signup_date` | int64 | 2,922 | −2,922 ~ −1 | **기준일 대비 일수** (음수 = 과거). 날짜 문자열 아님 | 노이즈 (0.013) |
+| `signup_date` | int64 | 2,922 | −2,922 ~ −1 | **기준일 대비 일수** (음수 = 과거). ⚠️ 대회 문서는 "date"라고 하나 실제는 정수 | 노이즈 (0.013) |
 | `weekly_hours` | float64 | 125,000 | 0.00007 ~ 50 | 주간 청취시간(시간) | **신호 1위** (문턱 5/10/40h) |
-| `average_session_length` | float64 | 124,996 | 1.0 ~ 120.0 | 평균 세션 길이(분) | 노이즈 (0.015) |
+| `average_session_length` | float64 | 124,996 | 1.0 ~ 120.0 | 평균 세션 길이. ⚠️ **단위 미상** (대회 문서는 "시간"이라 하나 120시간 세션은 비현실적) | 노이즈 (0.015) |
 | `song_skip_rate` | float64 | 124,995 | 0.0 ~ 1.0 | 곡 스킵 비율 | **신호** (문턱 0.7) |
 | `weekly_songs_played` | int64 | 497 | 3 ~ 499 | 주간 재생 곡 수 | 노이즈 (0.017) |
 | `weekly_unique_songs` | int64 | 297 | 3 ~ 299 | 주간 고유 재생 곡 수 | 노이즈 (0.029) |

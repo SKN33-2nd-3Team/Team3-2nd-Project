@@ -9,7 +9,6 @@
 
 - FN:FP 비용비 `3:1`과 운영 threshold `0.30`을 캠페인 기준으로 사용할지
 - 캠페인 손익 계산에 쓴 LTV 가정(월 ARPU 10,000원 × 12개월)을 실제 사업 수치로 대체할지
-- **신규 데이터셋의 출처·라이선스 기록** ([docs/data_card.md](docs/data_card.md) 상단 미기재 항목)
 
 ## 1. 빠른 실행
 
@@ -46,6 +45,7 @@ python -m streamlit run app/streamlit_app.py --server.port 8501
 | ID 처리 | `customer_id`는 모델에서 제외 |
 | 누수 점검 | train/test `customer_id` 교집합 **0건**, 결측 0건, 중복 0건 |
 | 원본 보존 | 원본 CSV를 수정하지 않음 |
+| 출처 | [Streaming Subscription Churn Model — Kaggle Competition](https://www.kaggle.com/competitions/streaming-subscription-churn-model/data) · 라이선스 MIT · 2026-07-21 다운로드 |
 
 제공 `test.csv`는 정답이 없으므로 최종 평가용이 아니라 **추론 대상**입니다. 성능 수치는 `train.csv`를 60/20/20으로 나눈 내부 train/validation/test에서 계산했습니다.
 
@@ -93,7 +93,7 @@ FN 비용을 FP보다 높게 보는 요구사항을 반영해 `FN:FP = 3:1` 비�
 2. **이론 성능 상한이 존재합니다.** Bernoulli 난수 때문에 최대 달성 가능 정확도가 86.1%이고 현행 모델이 84.8%입니다. 남은 1.3%p는 어떤 알고리즘으로도 회수할 수 없어 추가 튜닝·딥러닝을 착수하지 않았습니다.
 3. **예측 시점이 정의되지 않았습니다.** 관측 기준일·해지일이 없어 "향후 30일 내 해지" target을 검증하지 못했습니다. 화면·문서에서 시간 지평을 주장하지 않습니다.
 4. **물리적으로 불가능한 레코드가 25~30% 있습니다.** 고유곡 > 총재생곡 29.6%, 공유 > 생성 플레이리스트 24.6%. 해당 컬럼은 모두 노이즈로 판정되어 모델에서 제외되지만, 이 데이터로 청취 패턴 2차 분석을 해서는 안 됩니다.
-5. **신규 데이터셋의 출처·라이선스가 미기재입니다.** [docs/data_card.md](docs/data_card.md)의 미기재 항목을 팀이 채워야 합니다.
+5. **대회 컬럼 설명과 실제 값이 3곳 어긋납니다.** `num_subscription_pauses`(문서 max 2 / 실제 0~4), `signup_date`(문서 date / 실제 음수 정수), `average_session_length`(문서 시간 / 실제 단위 미상). 컬럼 의미를 단정하지 않고 실측값 기준으로 처리했습니다. [docs/data_card.md](docs/data_card.md) 참조
 6. 외부 캠페인 자동 실행·고객 차단·자동 해지 통지는 범위 밖입니다. 화면 결과는 검토 우선순위 지원용입니다.
 
 ## 7. 산출물 위치
