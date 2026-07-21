@@ -509,6 +509,41 @@ def customer_insights_page(insights: pd.DataFrame):
         st.warning("저장된 인사이트 목록을 찾을 수 없습니다.")
         return
     visible = insights.loc[insights["insight_id"].isin(["I01", "I02", "I03", "I04"])].copy()
+    korean_copy = {
+        "I01": {
+            "insight": "주간 청취 시간이 낮고 곡 건너뛰기 비율이 높을수록 이탈 라벨과 연관성이 관찰됩니다.",
+            "actionability": "진단 우선 세그먼트로 활용하되, 원인이라고 단정하지 않습니다.",
+            "limitation": "시간적 선후관계가 없어 인과관계를 판단할 수 없습니다.",
+            "evidence": "EDA 이탈률 차트와 Feature Importance",
+            "status": "관찰 연관성 검증",
+        },
+        "I02": {
+            "insight": "Free 구독 유형에서 높은 관측 이탈률이 나타납니다.",
+            "actionability": "혜택·전환 제안의 가설로만 활용하고 실험으로 검증합니다.",
+            "limitation": "제안이나 혜택의 실제 효과는 알려져 있지 않습니다.",
+            "evidence": "구독 유형별 EDA 이탈률",
+            "status": "관찰 연관성 검증",
+        },
+        "I03": {
+            "insight": "고객 서비스 문의가 많을수록 이탈 라벨과 연관성이 관찰됩니다.",
+            "actionability": "상담 해결 품질·처리 속도 개선 실험의 가설로 활용합니다.",
+            "limitation": "문의가 이탈의 원인인지, 이탈 위험의 결과인지 알 수 없습니다.",
+            "evidence": "고객 서비스 문의별 EDA 이탈률",
+            "status": "관찰 연관성 검증",
+        },
+        "I04": {
+            "insight": "구독 일시정지 횟수와 연령은 모델의 예측 신호에 기여합니다.",
+            "actionability": "일시정지는 진단 신호로 활용하고, 연령 활용은 공정성 검토가 필요합니다.",
+            "limitation": "모델 중요도는 행동 가능한 원인이나 개입 효과를 뜻하지 않습니다.",
+            "evidence": "저장된 Feature Importance",
+            "status": "모델 신호 확인",
+        },
+    }
+    for index, row in visible.iterrows():
+        translated = korean_copy.get(row["insight_id"])
+        if translated:
+            for column, value in translated.items():
+                visible.loc[index, column] = value
     for row_group in np.array_split(visible, max(1, int(np.ceil(len(visible) / 2)))):
         columns = st.columns(len(row_group))
         for column, (_, row) in zip(columns, row_group.iterrows()):
