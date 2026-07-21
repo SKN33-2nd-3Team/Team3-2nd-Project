@@ -1,0 +1,32 @@
+{
+  "features": [
+    "customer_id",
+    "age",
+    "location",
+    "subscription_type",
+    "payment_plan",
+    "num_subscription_pauses",
+    "payment_method",
+    "customer_service_inquiries",
+    "signup_date",
+    "weekly_hours",
+    "average_session_length",
+    "song_skip_rate",
+    "weekly_songs_played",
+    "weekly_unique_songs",
+    "num_favorite_artists",
+    "num_platform_friends",
+    "num_playlists_created",
+    "num_shared_playlists",
+    "notifications_clicked"
+  ],
+  "target": "churned",
+  "positive_class": 1,
+  "thresholds": {
+    "recall_first": 0.29,
+    "balanced_f1": 0.3499999999999999,
+    "precision_first": 0.74
+  },
+  "default_scenario": "balanced_f1",
+  "schema_note": "customer_id는 입력 계약에는 포함되지만 모델 Feature 변환 단계에서 제외됩니다."
+}

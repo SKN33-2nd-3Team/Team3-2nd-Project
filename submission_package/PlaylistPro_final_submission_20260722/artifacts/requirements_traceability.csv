@@ -1,0 +1,15 @@
+requirement_id,requirement,deliverable,evidence,status,limitation
+R01,데이터 출처·라이선스·실제합성 여부,전처리 결과서,reports/preprocessing_report.md;DATA_SOURCE.md,충족,최종 법적 승인은 제출자 확인
+R02,Target·0/1·분석 단위·예측 시점,전처리 결과서,reports/preprocessing_report.md;docs/requirements.md,충족,예측 기간은 원데이터에서 미정의
+R03,결측·중복·이상값·클래스 비율,전처리 결과서,notebooks/01_data_check.ipynb;figures/preprocessing,충족,논리 위반은 원본 보존
+R04,EDA와 모델링 결정 연결,전처리 결과서,notebooks/02_eda.ipynb;reports/preprocessing_report.md,충족,연관성을 인과로 해석하지 않음
+R05,Train Fold 내부 전처리와 누수 방지,전처리 결과서,src/full_fair_features.py;docs/validation_plan.md,충족,외부 시간 Holdout 없음
+R06,Baseline과 여러 모델 공정 비교,학습 결과서,artifacts/model_comparison_fair.csv;figures/training,충족,모두 내부 OOF
+R07,성능 개선 과정과 실패 실험,학습 결과서,artifacts/preprocessing_experiment_results.csv;random_search_summary.csv,충족,완료 결과 재사용
+R08,최종 모델 선정과 Threshold 근거,학습 결과서,reports/training_report.md;artifacts/final_model_selection_matrix.csv,충족,사업 Threshold는 미승인
+R09,FN·FP·오류·세그먼트 분석,학습 결과서,artifacts/threshold_operating_scenarios_v2.csv;segment_error_analysis.csv,충족,합성 세그먼트
+R10,최종 모델 저장·새 프로세스 추론,최종 모델,models/churn_pipeline.joblib;artifacts/model_metadata.json,충족,joblib 신뢰 경계 필요
+R11,Streamlit 저장 모델 실제 호출,Streamlit,app/streamlit_app.py;assets/screenshots,충족,캠페인 자동 실행 없음
+R12,README 설치·실행·구조·한계,README,README.md,충족,팀 역할은 사람 확인
+R13,제출용 PDF와 발표자료,PDF·발표,reports/*.pdf;presentation/*,충족,발표 전 최종 리허설 권장
+R14,프로젝트 ZIP,ZIP,../PlaylistPro_final_submission_20260722.zip,충족,Google Drive 업로드는 사용자 수행
