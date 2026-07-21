@@ -1,0 +1,59 @@
+{
+  "run_id": "20260721_submission_bounded_v1",
+  "run_name": "Submission Bounded Modeling Run",
+  "status": "MODEL_CANDIDATE_SAVED_AWAITING_REVIEW",
+  "checkpoint": "candidate_saved_and_reloaded",
+  "scope": {
+    "existing_app_model_replacement": "DEFERRED",
+    "streamlit_integration": "DEFERRED",
+    "production_promotion": "DEFERRED"
+  },
+  "data": {
+    "train": "data/train.csv",
+    "test": "data/test.csv",
+    "raw_data_mutation": "forbidden"
+  },
+  "model_universe": {
+    "required_by_instruction": [
+      "dummy",
+      "logistic_regression",
+      "decision_tree",
+      "random_forest",
+      "gradient_boosting",
+      "xgboost",
+      "lightgbm",
+      "catboost"
+    ],
+    "environment_unavailable": [],
+    "unavailable_handling": "Pinned packages installed with user approval; actual validation runs recorded."
+  },
+  "resource_budget": {
+    "priority": "P0",
+    "cv_folds": 3,
+    "randomized_search_upper_bounds": {
+      "logistic_regression": 8,
+      "decision_tree": 8,
+      "random_forest": 6,
+      "gradient_boosting": 6,
+      "xgboost": 6,
+      "lightgbm": 6,
+      "catboost": 5
+    }
+  },
+  "completed_steps": [
+    "repository_audit",
+    "existing_experiment_evidence_materialized",
+    "isolated_bounded_candidate_run",
+    "candidate_reload_validation",
+    "final_evidence_pack"
+  ],
+  "pending_steps": [
+    "human_review",
+    "production_promotion_deferred"
+  ],
+  "candidate": {
+    "path": "models\\candidates\\20260721_submission_bounded_v1",
+    "model": "lightgbm",
+    "reload_verified": true
+  }
+}

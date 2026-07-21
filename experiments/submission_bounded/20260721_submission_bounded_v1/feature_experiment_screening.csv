@@ -1,0 +1,7 @@
+experiment_id,experiment,change,validation_pr_auc,test_pr_auc,decision,provenance,delta_test_pr_auc_vs_baseline,reason
+FE-00,minimal logistic baseline,No derived features,0.8968378198913088,0.901371393207074,reference,VERIFIED: current pipeline comparison,,
+FE-01,deterministic ratio/date features,signup_days_ago plus four ratios; all computed inside Pipeline,0.8967871533955978,0.9013040782475225,measured but not automatically adopted for the bounded candidate,VERIFIED: current pipeline comparison,-6.731495955158984e-05,
+FE-02,polynomial/interactions,,,,rejected,INFERRED from model family and feature cardinality,,One-hot expansion raises complexity; tree candidates already learn interactions.
+FE-03,log/power transform,,,,deferred,UNVERIFIED,,No completed isolated experiment checkpoint; not rerun before P0 candidate comparison.
+FE-04,rare-level grouping/frequency encoding,,,,rejected,VERIFIED schema plus INFERRED design decision,,Categorical fields are low-cardinality; OneHotEncoder is sufficient.
+FE-05,target encoding,,,,rejected,VERIFIED schema plus ML guardrail,,Leakage-prone without a CV-only encoder and unnecessary for low-cardinality fields.

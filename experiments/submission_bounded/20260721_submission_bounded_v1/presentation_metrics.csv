@@ -1,0 +1,5 @@
+metric,value,status,source
+internal_test_pr_auc,0.947287056468388,VERIFIED,artifacts/model/metadata.json
+internal_test_roc_auc,0.9415870759013955,VERIFIED,artifacts/model/metadata.json
+prediction_horizon,UNVERIFIED,UNVERIFIED,dataset documentation absent
+campaign_uplift,UNVERIFIED,UNVERIFIED,campaign outcomes absent

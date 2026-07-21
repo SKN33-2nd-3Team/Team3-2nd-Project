@@ -1,0 +1,5 @@
+stage,status,next_decision
+repository_audit,VERIFIED,Reuse artifacts without rerunning completed experiments
+feature_screening,VERIFIED/INFERRED,Run only isolated missing P0 experiments
+external_boosters,UNAVAILABLE,Obtain explicit dependency approval before installation
+candidate_selection,DEFERRED,Require bounded candidate run and reload validation
