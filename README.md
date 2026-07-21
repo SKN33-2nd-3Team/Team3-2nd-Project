@@ -78,3 +78,11 @@ FN 비용을 FP보다 높게 보는 요구사항을 반영해 임시 `FN:FP = 3:
 - 제공 test 추론 결과: `artifacts/test_predictions.csv`
 
 원본 출처: [Music Streaming Customer Churn Dataset — Kaggle](https://www.kaggle.com/datasets/daliado98/music-streaming-customer-churn-dataset)
+
+## 8. 협업 및 Git 설정
+
+- [GitHub 협업 규칙](CONTRIBUTING.md): 브랜치, 커밋, Issue, PR, 리뷰 규칙
+- [Git·GitHub 최초 설정 가이드](docs/GIT_SETUP.md): Clone, 사용자 정보, 작업 브랜치, Push, 저장소 관리자 설정
+- Pull Request와 Issue 작성 시 `.github/`의 템플릿을 사용합니다.
+
+기본 원칙은 `main`에 직접 push하지 않고 `feature/*`, `fix/*`, `docs/*` 작업 브랜치에서 변경한 뒤 Pull Request로 병합하는 것입니다.

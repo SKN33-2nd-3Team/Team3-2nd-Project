@@ -1,7 +1,7 @@
-# Generated documentation and runtime logs.
-docs/
+# Runtime outputs and generated local reports.
 logs/
 ml_runs/
+tmp/
 PROJECT_REGISTER.md
 
 # Python caches and local tooling state.
@@ -12,5 +12,22 @@ __pycache__/
 
 # Local environment files.
 .env
+.env.*
+!.env.example
 .venv/
 venv/
+
+# Editor and operating-system files.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Notebook and test caches.
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Local logs and temporary files.
+*.log
+*.tmp

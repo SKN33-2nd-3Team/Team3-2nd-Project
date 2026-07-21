@@ -1,0 +1,51 @@
+name: 모델·Feature 실험
+description: 모델, Feature, threshold 실험을 동일 조건으로 기록합니다.
+title: "[Experiment] "
+labels: []
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: 가설
+      description: 무엇이 어떤 지표를 개선할 것으로 예상하는지 작성해주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: fixed
+    attributes:
+      label: 고정 조건
+      value: |
+        - 데이터 버전:
+        - 분할 또는 CV:
+        - 전처리 Pipeline:
+        - 기준 모델:
+        - 주요 평가 지표:
+    validations:
+      required: true
+  - type: textarea
+    id: variable
+    attributes:
+      label: 변경 조건
+      description: 모델, Feature preset, 하이퍼파라미터 또는 threshold 후보를 작성해주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: leakage
+    attributes:
+      label: 누수 점검
+      value: |
+        - [ ] Target과 예측 시점을 확인했다.
+        - [ ] 동적 Feature와 전처리기는 학습 Fold에서만 fit한다.
+        - [ ] Test를 모델 선택에 사용하지 않는다.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 결과
+      description: CV/Validation과 Test를 구분하고 PR-AUC, Recall, Precision, 비용을 기록해주세요.
+  - type: textarea
+    id: conclusion
+    attributes:
+      label: 결론
+      description: 채택 또는 기각, 근거, 한계와 후속 작업을 작성해주세요.

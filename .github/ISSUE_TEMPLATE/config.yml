@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 협업 규칙 확인
+    url: https://github.com/SKN33-2nd-3Team/Team3-2nd-Project/blob/main/CONTRIBUTING.md
+    about: Issue 작성 전 브랜치·커밋·PR 규칙을 확인해주세요.
