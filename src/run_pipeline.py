@@ -134,12 +134,19 @@ def plot_categorical_target(train: pd.DataFrame, column: str) -> None:
 
 
 def plot_signup_cohort(train: pd.DataFrame) -> None:
-    dates = pd.to_datetime(train["signup_date"], errors="coerce")
-    cohort = train.assign(signup_year=dates.dt.year).groupby("signup_year")["churned"].agg(["mean", "size"])
+    if pd.api.types.is_numeric_dtype(train["signup_date"]):
+        # 신규 데이터: 기준일 대비 일수 → 연 단위 코호트로 묶어서 표시
+        years_ago = (-train["signup_date"] // 365).astype(int)
+        cohort = train.assign(signup_year=years_ago).groupby("signup_year")["churned"].agg(["mean", "size"])
+        xlabel = "Signup years ago"
+    else:
+        dates = pd.to_datetime(train["signup_date"], errors="coerce")
+        cohort = train.assign(signup_year=dates.dt.year).groupby("signup_year")["churned"].agg(["mean", "size"])
+        xlabel = "Signup year"
     fig, ax = plt.subplots(figsize=(8, 4.5))
     ax.plot(cohort.index, cohort["mean"], marker="o", color="#D95D39")
-    ax.set_title("Churn rate by signup year (cohort view)")
-    ax.set_xlabel("Signup year")
+    ax.set_title("Churn rate by signup cohort")
+    ax.set_xlabel(xlabel)
     ax.set_ylabel("Churn rate")
     ax.set_xticks(cohort.index)
     ax.grid(alpha=0.25)
@@ -165,7 +172,7 @@ def plot_numeric_correlations(train: pd.DataFrame, numeric_columns: list[str]) -
 def run_eda(train: pd.DataFrame, test: pd.DataFrame) -> dict:
     numeric_columns = train.select_dtypes(include=np.number).columns.tolist()
     numeric_columns = [c for c in numeric_columns if c not in ["customer_id", "churned"]]
-    categorical_columns = [c for c in train.select_dtypes(include="object").columns if c != "signup_date"]
+    categorical_columns = [c for c in train.select_dtypes(exclude=np.number).columns if c != "signup_date"]
 
     plot_target(train)
     for column in numeric_columns:

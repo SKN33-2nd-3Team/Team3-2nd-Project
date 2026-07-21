@@ -1,52 +1,50 @@
 ﻿feature,importance,rank
-payment_plan_annual,0.3531464793623161,1
-signup_year,0.20554189619912203,2
-payment_plan_monthly,0.16322091823030999,3
-age,0.0660914968869494,4
-num_platform_friends,0.0634632016009003,5
-hours_per_song,0.017905834568235034,6
-friends_per_playlist,0.016292589307975742,7
-unique_song_ratio,0.015687826582541777,8
-weekly_unique_songs,0.012753674960259979,9
-average_session_length,0.010611886902839767,10
-weekly_hours,0.009971019146057749,11
-weekly_songs_played,0.009957790962060469,12
-notifications_clicked,0.008964407148357034,13
-signup_month,0.007446060223426113,14
-song_skip_rate,0.0071797541958632995,15
-num_playlists_created,0.006695021951840541,16
-subscription_type_student,0.006276788872262566,17
-shared_playlist_ratio,0.002589646021742176,18
-num_favorite_artists,0.0022695347623379277,19
-location_California,0.002165766723253793,20
-num_shared_playlists,0.0016889015448647486,21
-location_Montana,0.0013545387047763622,22
-location_New Jersey,0.0012202561473319763,23
-subscription_type_basic,0.0011641152783087344,24
-location_North Dakota,0.0010341608890724562,25
-location_New York,0.0008277928189808291,26
-location_Vermont,0.0008060303622243319,27
-subscription_type_family premium,0.0007989283180383882,28
-location_South Carolina,0.0006285248524500728,29
-num_subscription_pauses_monthly,0.0005827196237296772,30
-location_Washington,0.00042059806314036647,31
-customer_service_inquiries_none,0.0003452563247035177,32
-location_Florida,0.0002326020243416079,33
-num_subscription_pauses_annual,0.00020572498251625475,34
-customer_service_inquiries_many,0.0001845051016895745,35
-location_Maine,0.0001398156944612021,36
-location_North Carolina,0.00013204921324278112,37
-subscription_type_premium,1.8854474753385438e-06,38
-location_Alabama,0.0,39
-location_Idaho,0.0,40
-location_Georgia,0.0,41
-location_Utah,0.0,42
-location_Nebrasksa,0.0,43
-location_West Virginia,0.0,44
-location_Virginia,0.0,45
-location_Wisconsin,0.0,46
-payment_method_credit,0.0,47
-payment_method_venmo,0.0,48
-payment_method_debit,0.0,49
-customer_service_inquiries_few,0.0,50
-customer_service_inquiries_some,0.0,51
+weekly_hours,0.2405288837913339,1
+subscription_type_Free,0.2019934611954215,2
+customer_service_inquiries_High,0.1284966939756263,3
+customer_service_inquiries_Low,0.11960767253425751,4
+num_subscription_pauses,0.08634094361148557,5
+song_skip_rate,0.07662598939032732,6
+age,0.06783150379237302,7
+subscription_type_Student,0.05600904306273398,8
+notifications_clicked,0.01146572346043001,9
+subscription_type_Premium,0.005497834179732461,10
+weekly_unique_songs,0.003537246667321959,11
+subscription_type_Family,0.0020650043389564693,12
+num_playlists_created,0.0,13
+num_platform_friends,0.0,14
+average_session_length,0.0,15
+num_favorite_artists,0.0,16
+weekly_songs_played,0.0,17
+friends_per_playlist,0.0,18
+hours_per_song,0.0,19
+shared_playlist_ratio,0.0,20
+unique_song_ratio,0.0,21
+signup_days_ago,0.0,22
+num_shared_playlists,0.0,23
+location_Alabama,0.0,24
+location_California,0.0,25
+location_New Jersey,0.0,26
+location_New York,0.0,27
+location_Florida,0.0,28
+location_Georgia,0.0,29
+location_Idaho,0.0,30
+location_Maine,0.0,31
+location_Montana,0.0,32
+location_Nebrasksa,0.0,33
+location_Virginia,0.0,34
+location_Vermont,0.0,35
+location_Utah,0.0,36
+location_South Carolina,0.0,37
+location_North Dakota,0.0,38
+location_North Carolina,0.0,39
+location_Wisconsin,0.0,40
+location_West Virginia,0.0,41
+payment_plan_Monthly,0.0,42
+location_Washington,0.0,43
+payment_plan_Yearly,0.0,44
+payment_method_Apple Pay,0.0,45
+payment_method_Debit Card,0.0,46
+payment_method_Credit Card,0.0,47
+payment_method_Paypal,0.0,48
+customer_service_inquiries_Medium,0.0,49
