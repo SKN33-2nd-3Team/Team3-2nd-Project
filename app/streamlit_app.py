@@ -30,6 +30,7 @@ PROGRESSION_PATH = ARTIFACT_DIR / "performance_progression.csv"
 DECISION_MATRIX_PATH = ARTIFACT_DIR / "model_selection_decision_matrix.csv"
 INSIGHT_INVENTORY_PATH = ARTIFACT_DIR / "current_insight_inventory.csv"
 FAIR_COMPARISON_PATH = ARTIFACT_DIR / "model_comparison_fair.csv"
+PREPROCESSING_REGISTER_PATH = ARTIFACT_DIR / "insight_preprocessing_register.csv"
 
 st.set_page_config(
     page_title="PlaylistPro Insight",
@@ -133,14 +134,15 @@ def load_artifacts() -> tuple[
 
 
 @st.cache_data(show_spinner=False)
-def load_presentation_evidence() -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_presentation_evidence() -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load saved evidence only; never fit or promote a candidate from the app."""
     candidate = json.loads(CANDIDATE_METADATA_PATH.read_text(encoding="utf-8")) if CANDIDATE_METADATA_PATH.exists() else {}
     progression = pd.read_csv(PROGRESSION_PATH) if PROGRESSION_PATH.exists() else pd.DataFrame()
     decision_matrix = pd.read_csv(DECISION_MATRIX_PATH) if DECISION_MATRIX_PATH.exists() else pd.DataFrame()
     insights = pd.read_csv(INSIGHT_INVENTORY_PATH) if INSIGHT_INVENTORY_PATH.exists() else pd.DataFrame()
     fair_comparison = pd.read_csv(FAIR_COMPARISON_PATH) if FAIR_COMPARISON_PATH.exists() else pd.DataFrame()
-    return candidate, progression, decision_matrix, insights, fair_comparison
+    preprocessing_register = pd.read_csv(PREPROCESSING_REGISTER_PATH) if PREPROCESSING_REGISTER_PATH.exists() else pd.DataFrame()
+    return candidate, progression, decision_matrix, insights, fair_comparison, preprocessing_register
 
 
 def safe_load():
@@ -631,6 +633,179 @@ def operations_page(targeting: pd.DataFrame, deciles: pd.DataFrame, scenarios: p
     st.write("연락 가능 인원과 이탈 고객을 놓치는 비용(FN), 비이탈 고객에게 연락하는 비용(FP)을 정한 뒤 시나리오를 선택합니다. Uplift와 ROI는 운영 후 통제된 캠페인으로 측정해야 합니다.")
 
 
+def project_summary_v2(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    metadata: dict,
+    candidate: dict,
+    targeting: pd.DataFrame,
+):
+    header("프로젝트 요약", "이탈 고객을 단정하는 도구가 아니라, 제한된 검토 인력을 어디에 먼저 쓸지 돕는 의사결정 지원 화면입니다.")
+    top30 = targeting.loc[targeting["top_percent"].eq(30)] if not targeting.empty else pd.DataFrame()
+    if not top30.empty:
+        evidence = top30.iloc[0]
+        decision_text = (
+            f"내부 Holdout에서 위험 점수 상위 30%({int(evidence['target_customers']):,}명)를 검토하면, "
+            f"관측된 이탈 라벨의 {float(evidence['capture_rate']):.1%}를 포착했습니다. "
+            f"이 값은 실제 캠페인 효과가 아닌 저장된 모델 평가 결과입니다."
+        )
+    else:
+        decision_text = "저장된 내부 Holdout 대상화 근거를 찾을 수 없습니다."
+    st.markdown(
+        f'<div class="hero"><div class="eyebrow" style="color:#ffb3a4">핵심 의사결정</div>'
+        f'<h1>누구를 먼저 검토할지, 점수 순위로 정합니다.</h1><p>{decision_text}</p></div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("학습 고객", f"{len(train):,}", "라벨 있음")
+    with c2:
+        metric_card("배치 고객", f"{len(test):,}", "라벨 없음")
+    with c3:
+        metric_card("관측 이탈 라벨 비율", f"{train['churned'].mean():.1%}", "churned=1")
+    with c4:
+        metric_card("현재 데모 추론", "Gradient Boosting", "저장된 Pipeline")
+    st.markdown('<div class="section-label">사용자가 알아야 할 세 가지</div>', unsafe_allow_html=True)
+    left, middle, right = st.columns(3)
+    with left:
+        st.markdown('<div class="note-card"><b>1. 인사이트</b><br>행동·구독·문의 신호의 차이는 이탈 라벨과의 관찰된 연관성입니다. 원인으로 단정하지 않습니다.</div>', unsafe_allow_html=True)
+    with middle:
+        st.markdown('<div class="note-card"><b>2. 모델</b><br>현재 앱은 Gradient Boosting으로 실제 점수를 산출합니다. LightGBM은 별도 검증 후보이며 아직 교체되지 않았습니다.</div>', unsafe_allow_html=True)
+    with right:
+        st.markdown('<div class="note-card"><b>3. 운영</b><br>Threshold는 확률을 바꾸지 않습니다. 검토 대상의 범위와 FN·FP의 균형을 정합니다.</div>', unsafe_allow_html=True)
+    with st.expander("모델 상태와 검증 한계"):
+        st.markdown(f"**현재 데모 추론 모델:** `{metadata.get('model', 'unknown')}`")
+        candidate_status_card(candidate)
+        st.caption("제공 데이터에는 관측 기준일과 미래 이탈 기간 정의가 없습니다. 30일 이탈, 캠페인 Uplift, ROI는 검증되지 않았습니다.")
+
+
+def customer_insights_v2(train: pd.DataFrame, insights: pd.DataFrame):
+    header("고객 인사이트", "관찰값 → 해석 → 다음 검증 행동의 순서로, 실제로 활용 가능한 신호만 압축했습니다.")
+    weekly_band = pd.qcut(train["weekly_hours"], q=4, duplicates="drop")
+    weekly_rates = train.groupby(weekly_band, observed=True)["churned"].mean()
+    skip_band = pd.qcut(train["song_skip_rate"], q=4, duplicates="drop")
+    skip_rates = train.groupby(skip_band, observed=True)["churned"].mean()
+    subscription_rates = train.groupby("subscription_type")["churned"].mean().sort_values(ascending=False)
+    inquiry_rates = train.groupby("customer_service_inquiries")["churned"].mean().sort_values()
+    cards = [
+        (
+            "청취 저하·스킵 패턴",
+            f"주간 청취 시간 사분위 간 이탈 라벨 차이 {weekly_rates.max() - weekly_rates.min():.1%}, "
+            f"스킵률 사분위 간 차이 {skip_rates.max() - skip_rates.min():.1%}",
+            "다음 행동: 사용 저하 고객을 진단 우선 세그먼트로 분류하고, 실제 개선 개입은 실험으로 검증합니다.",
+            "한계: 행동 저하가 이탈의 원인인지 결과인지 알 수 없습니다.",
+        ),
+        (
+            "구독 유형",
+            f"가장 높은 관측 이탈률은 {subscription_rates.index[0]} {subscription_rates.iloc[0]:.1%}, "
+            f"가장 낮은 유형과의 차이는 {subscription_rates.iloc[0] - subscription_rates.iloc[-1]:.1%}",
+            "다음 행동: 혜택·전환 제안의 우선 실험군을 설계합니다.",
+            "한계: 제안이 실제 이탈을 줄이는지는 이 데이터만으로 알 수 없습니다.",
+        ),
+        (
+            "고객 서비스 문의",
+            f"문의 수준 간 관측 이탈 라벨 차이 {inquiry_rates.iloc[-1] - inquiry_rates.iloc[0]:.1%}",
+            "다음 행동: 문의 해결 속도와 재문의율을 KPI로 둔 서비스 개선 실험을 설계합니다.",
+            "한계: 문의가 이탈의 원인인지, 위험 고객의 결과인지 분리되지 않습니다.",
+        ),
+    ]
+    for column, (title, observation, action, limit) in zip(st.columns(3), cards):
+        with column:
+            st.markdown(f'<div class="metric-card"><div class="metric-label">관찰</div><div class="metric-value" style="font-size:20px">{title}</div><div class="small-caption">{observation}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="note-card"><b>{action}</b><br><span class="small-caption">{limit}</span></div>', unsafe_allow_html=True)
+    with st.expander("모델 신호이지만 행동 판단에는 주의할 항목"):
+        st.markdown("구독 일시정지 횟수는 진단 신호가 될 수 있습니다. 연령도 모델 신호에 기여하지만, 행동 대상 선정에 사용할 때는 공정성·정책 검토가 선행되어야 합니다.")
+    if not insights.empty:
+        st.caption("근거: 저장된 EDA·Feature Importance 인사이트 목록. 모든 수치는 제공된 학습 데이터의 라벨 기준 관찰값입니다.")
+
+
+def improvement_journey_v2(preprocessing_register: pd.DataFrame, fair_comparison: pd.DataFrame, candidate: dict):
+    header("모델 개선 과정", "같은 평가 조건에서 확인된 Feature 개선과 모델 비교를 분리해, 무엇이 실제로 개선됐는지 보여줍니다.")
+    st.markdown('<div class="section-label">1. Feature 선택 — 동일 Logistic OOF 비교</div>', unsafe_allow_html=True)
+    if preprocessing_register.empty:
+        st.warning("저장된 전처리 실험 결과를 찾을 수 없습니다.")
+    else:
+        raw = preprocessing_register.loc[preprocessing_register["variant"].eq("raw")].iloc[0]
+        selected = preprocessing_register.loc[preprocessing_register["variant"].eq("log_numeric")].iloc[0]
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            metric_card("Raw Feature PR-AUC", f"{float(raw['logistic_pr_auc']):.3f}", "동일 Logistic OOF")
+        with c2:
+            metric_card("채택 Feature PR-AUC", f"{float(selected['logistic_pr_auc']):.3f}", "log_numeric")
+        with c3:
+            metric_card("동일 조건 개선", f"{float(selected['logistic_pr_auc']) - float(raw['logistic_pr_auc']):+.3f}", "PR-AUC 차이")
+        display = preprocessing_register[["variant", "logistic_pr_auc", "decision", "reason"]].copy()
+        display.columns = ["Feature Variant", "Logistic OOF PR-AUC", "결정", "근거"]
+        st.dataframe(display, hide_index=True, width="stretch")
+        st.caption("비율·상호작용·신호 축소 Variant는 Raw보다 낮아 제외했고, `log_numeric`만 동일 조건에서 가장 높아 잠정 채택했습니다.")
+    st.markdown('<div class="section-label">2. 모델 비교 — 동일 Feature 5-Fold OOF</div>', unsafe_allow_html=True)
+    if not fair_comparison.empty:
+        ranked = fair_comparison.sort_values("pr_auc", ascending=False).copy()
+        fig = px.bar(ranked.head(4), x="model", y="pr_auc", color="model", text=ranked.head(4)["pr_auc"].map(lambda value: f"{value:.3f}"))
+        fig.update_layout(title="상위 4개 모델의 공통 Feature OOF PR-AUC", showlegend=False, xaxis_title=None, yaxis_title="PR-AUC")
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+        st.caption("이 비교에서는 CatBoost와 LightGBM의 PR-AUC 차이가 매우 작습니다. 단일 OOF 점수만으로 운영 모델을 확정하지 않습니다.")
+    st.markdown('<div class="section-label">3. 저장된 후보 상태</div>', unsafe_allow_html=True)
+    candidate_status_card(candidate)
+    st.warning("현재 결론: 공정 비교·튜닝·안정성 검증이 모두 끝나기 전까지는 ‘최종 운영 모델’이 아니라 ‘검토 중인 기술 후보’로만 표현합니다.")
+
+
+def model_comparison_v2(fair_comparison: pd.DataFrame, candidate: dict):
+    header("모델 비교·검증 상태", "최고 점수와 운영 후보를 구분하고, 현재 확정 가능한 결론만 제시합니다.")
+    if fair_comparison.empty:
+        st.warning("저장된 공통 Feature 모델 비교 결과를 찾을 수 없습니다.")
+        return
+    ranked = fair_comparison.sort_values("pr_auc", ascending=False).reset_index(drop=True)
+    best, lightgbm = ranked.iloc[0], ranked.loc[ranked["model"].eq("lightgbm")].iloc[0]
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("공정 OOF 최고 모델", str(best["model"]).upper(), f"PR-AUC {float(best['pr_auc']):.3f}")
+    with c2:
+        metric_card("LightGBM OOF PR-AUC", f"{float(lightgbm['pr_auc']):.3f}", f"최고 모델과 {float(best['pr_auc']) - float(lightgbm['pr_auc']):.4f} 차이")
+    with c3:
+        metric_card("현재 운영 모델", "미확정", "후보 검토 중")
+    st.markdown('<div class="info-card"><b>이 화면의 결론</b><br>공통 Feature OOF 비교의 최고 점수는 CatBoost입니다. 그러나 차이가 작고, 저장된 LightGBM 후보는 별도 P0 검증 Run의 결과입니다. 두 결과를 합쳐 ‘LightGBM이 최종 선정됐다’고 말할 수는 없습니다.</div>', unsafe_allow_html=True)
+    display = ranked[["model", "pr_auc", "roc_auc", "recall", "precision", "fn", "fp"]].copy()
+    display.columns = ["모델", "PR-AUC", "ROC-AUC", "Recall", "Precision", "FN", "FP"]
+    st.dataframe(display, hide_index=True, width="stretch")
+    with st.expander("저장된 LightGBM 후보 근거"):
+        candidate_status_card(candidate)
+        st.caption("다음 결정: 동일 공정 조건의 튜닝·Seed 안정성·Bootstrap 검증이 완료된 뒤 기술 선정과 운영 승격을 별도로 승인합니다.")
+
+
+def operations_v2(targeting: pd.DataFrame, deciles: pd.DataFrame, scenarios: pd.DataFrame):
+    header("운영 시나리오", "확률을 바꾸지 않고, 제한된 인력으로 어느 범위까지 검토할지를 고르는 화면입니다.")
+    scenario_ids = scenarios["scenario_id"].tolist()
+    selected_id = st.selectbox("비교할 운영 시나리오", scenario_ids, format_func=lambda value: scenario_label(get_scenario(scenarios, value)))
+    active = get_scenario(scenarios, selected_id)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("검토 대상 비율", f"{float(active['test_target_rate']):.1%}", "내부 Holdout")
+    with c2:
+        metric_card("Recall", f"{float(active['test_recall']):.1%}", "포착 범위")
+    with c3:
+        metric_card("Precision", f"{float(active['test_precision']):.1%}", "검토 효율")
+    with c4:
+        metric_card("FN / FP", f"{int(active['test_fn']):,} / {int(active['test_fp']):,}", "같은 시나리오 기준")
+    st.markdown(f'<div class="note-card"><b>{active["scenario_label"]}</b> — {active["selection_rule"]}<br>이 선택은 위험 점수를 바꾸지 않고, 누구를 검토 대상으로 표시할지만 바꿉니다.</div>', unsafe_allow_html=True)
+    scenario_view = scenarios[["scenario_label", "threshold", "test_target_rate", "test_precision", "test_recall", "test_f1", "test_fn", "test_fp"]].copy()
+    scenario_view.insert(0, "현재 선택", scenario_view["scenario_label"].eq(active["scenario_label"]).map({True: "●", False: ""}))
+    scenario_view.columns = ["선택", "시나리오", "Threshold", "대상 비율", "Precision", "Recall", "F1", "FN", "FP"]
+    st.dataframe(scenario_view, hide_index=True, width="stretch")
+    left, right = st.columns(2)
+    with left:
+        fig = go.Figure(go.Bar(x=targeting["top_percent"].map(lambda value: f"Top {value:g}%"), y=targeting["capture_rate"], marker_color="#E4573D", text=targeting["capture_rate"].map(lambda value: f"{value:.1%}"), textposition="outside"))
+        fig.update_layout(title="내부 Holdout Top-K Capture", yaxis_tickformat=".0%", yaxis_range=[0, 1.08], showlegend=False)
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    with right:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["actual_churn_rate"], name="관측 라벨", marker_color="#E4573D"))
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["mean_predicted_probability"], name="예측 점수", marker_color="#315A7D"))
+        fig.update_layout(title="내부 Holdout Risk Decile 점검", barmode="group", yaxis_tickformat=".0%", xaxis_title="Decile (10 = 최고 위험)")
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    st.caption("운영 지표는 현재 저장된 Gradient Boosting 데모 Pipeline의 내부 Holdout 결과입니다. 실제 캠페인 Uplift·ROI는 통제 실험으로 별도 측정해야 합니다.")
+
+
 def model_page(
     comparison: pd.DataFrame,
     threshold: pd.DataFrame,
@@ -903,6 +1078,7 @@ def prioritization_page(
         help="이 화면에서만 적용되는 위험 등급·대상 판단 기준입니다.",
     )
     active_scenario = get_scenario(scenarios, selected_id)
+    st.caption("위험 확률은 저장된 Pipeline이 계산합니다. 여기서 고르는 기준은 위험 등급과 검토 대상 표시만 바꾸며, 모델이나 확률 자체를 다시 계산하지 않습니다.")
     scoring_tab, batch_tab = st.tabs(["개별 고객 점수", "배치 우선순위"])
     with scoring_tab:
         prediction_page(train, model, metadata, scenarios, active_scenario, show_header=False)
@@ -1104,7 +1280,7 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
 
 def main():
     (train, test), model, (comparison, threshold, metadata, predictions, importance, targeting, deciles, scenarios) = safe_load()
-    candidate, progression, decision_matrix, insights, fair_comparison = load_presentation_evidence()
+    candidate, progression, decision_matrix, insights, fair_comparison, preprocessing_register = load_presentation_evidence()
     default_scenario_id = metadata.get("app_default_scenario_id", "balanced_f1")
     active_scenario = get_scenario(scenarios, default_scenario_id)
     with st.sidebar:
@@ -1130,15 +1306,15 @@ def main():
             )
 
     if page == "프로젝트 요약":
-        project_summary_page(train, test, metadata, candidate)
+        project_summary_v2(train, test, metadata, candidate, targeting)
     elif page == "고객 인사이트":
-        customer_insights_page(insights)
+        customer_insights_v2(train, insights)
     elif page == "모델 개선 과정":
-        improvement_page(progression, candidate, decision_matrix)
+        improvement_journey_v2(preprocessing_register, fair_comparison, candidate)
     elif page == "모델 비교·선정":
-        model_selection_page(fair_comparison, candidate, decision_matrix)
+        model_comparison_v2(fair_comparison, candidate)
     elif page == "운영 시나리오":
-        operations_page(targeting, deciles, scenarios)
+        operations_v2(targeting, deciles, scenarios)
     else:
         prioritization_page(train, model, metadata, predictions, scenarios, active_scenario)
 
