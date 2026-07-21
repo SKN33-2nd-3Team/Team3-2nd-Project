@@ -670,17 +670,79 @@ def strategy_review_panel(record: dict, probability: float, tables: dict, scenar
     st.caption("행동 후보는 EDA 연관성과 투명한 규칙에서 생성됩니다. 선택해도 CRM 발송·할인·고객 접촉은 실행되지 않습니다.")
 
 
-def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scenario: pd.Series) -> None:
+CAMPAIGN_ALLOCATION_MODES = {
+    "action_portfolio": "행동 경로별 파일럿 포트폴리오 (권장)",
+    "risk_priority": "위험 점수 순",
+    "economic_reference": "가정 매출효과-비용 순 (참고)",
+}
+
+
+def _prepare_campaign_plan(
+    strategy_queue: pd.DataFrame,
+    customer_plans: pd.DataFrame,
+    economics: pd.DataFrame,
+    threshold: float,
+    min_signal_count: int,
+    success_rate: float,
+    allocation_mode: str,
+) -> pd.DataFrame:
+    """Build an ordered, review-only campaign pool for the planning tab."""
+
+    if allocation_mode not in CAMPAIGN_ALLOCATION_MODES:
+        raise ValueError(f"지원하지 않는 배분 기준입니다: {allocation_mode}")
+    base = strategy_queue.merge(
+        customer_plans[["customer_id", "subscription_type"]],
+        on="customer_id",
+        how="inner",
+        validate="one_to_one",
+    ).rename(columns={"churn_probability": "probability", "subscription_type": "plan"})
+    work = base.loc[
+        base["probability"].ge(float(threshold))
+        & base["risk_signal_count"].ge(int(min_signal_count))
+    ].merge(economics, on="plan", how="inner", validate="many_to_one")
+    work["expected_revenue_effect"] = work["probability"] * float(success_rate) * work["customer_value"]
+    work["assumed_net_value"] = work["expected_revenue_effect"] - work["cost"]
+
+    if allocation_mode == "action_portfolio":
+        tier_rank = {"집중 관리": 0, "자동화 검토": 1, "관찰 유지": 2}
+        work["_tier_rank"] = work["campaign_tier"].map(tier_rank).fillna(3)
+        work = work.sort_values(
+            ["probability", "risk_signal_count"], ascending=[False, False]
+        )
+        work["_allocation_round"] = work.groupby(
+            ["campaign_tier", "primary_action"], sort=False
+        ).cumcount()
+        work = work.sort_values(
+            ["_allocation_round", "_tier_rank", "risk_signal_count", "probability"],
+            ascending=[True, True, False, False],
+        )
+    elif allocation_mode == "risk_priority":
+        work = work.sort_values(
+            ["probability", "risk_signal_count"], ascending=[False, False]
+        )
+    else:
+        work = work.sort_values(
+            ["assumed_net_value", "probability"], ascending=[False, False]
+        )
+    return work.reset_index(drop=True)
+
+
+def campaign_planning_panel(
+    test: pd.DataFrame,
+    strategy_queue: pd.DataFrame,
+    scenario: pd.Series,
+) -> None:
     st.markdown(
         '<div class="info-card"><b>가정 기반 캠페인 계획</b><br>'
-        f'현재 운영 선택은 <b>{html.escape(str(scenario["scenario_label"]))}</b>입니다. 예산·캠페인 변동비·연간 매출 대용치·추가 유지 성공률은 사용자 가정이며, '
-        '위험 점수 합계는 확정 이탈자 수가 아닙니다. 실제 Uplift·ROI로 해석하지 마세요.</div>',
+        f'현재 <b>{html.escape(str(scenario["scenario_label"]))}</b>의 Threshold <b>{float(scenario["threshold"]):.2f}</b> 이상에서 '
+        '행동 가능 신호를 가진 고객만 계획합니다. 기본 배분은 아직 효과가 검증되지 않은 행동들을 비교할 수 있도록 행동 경로별 파일럿 포트폴리오를 구성하며, '
+        '금액은 의사결정 민감도 참고값이지 실제 Uplift·ROI가 아닙니다.</div>',
         unsafe_allow_html=True,
     )
-    base = predictions[["customer_id", "churn_probability"]].merge(
+    planning_source = strategy_queue.merge(
         test[["customer_id", "subscription_type"]], on="customer_id", how="inner", validate="one_to_one"
     ).rename(columns={"churn_probability": "probability", "subscription_type": "plan"})
-    plan_order = base.groupby("plan")["probability"].mean().sort_values(ascending=False).index.tolist()
+    plan_order = planning_source.groupby("plan")["probability"].mean().sort_values(ascending=False).index.tolist()
 
     state = st.session_state
     state.setdefault("campaign_driver", "budget")
@@ -693,29 +755,39 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
 
     st.markdown('<div class="section-label">계획 가정과 대상 범위</div>', unsafe_allow_html=True)
     input_box = st.container()
-    assumption_left, assumption_right = st.columns([1.35, 1])
+    assumption_left, assumption_middle, assumption_right = st.columns([1, 1, 1.15])
     with assumption_left:
+        min_signal_count = st.slider(
+            "최소 행동 가능 신호 수", 1, 5, 2, 1, key="campaign_min_signal_count",
+            help="프로젝트의 집중 검토 기준인 행동 가능 신호 2개 이상을 기본값으로 사용합니다.",
+        )
+    with assumption_middle:
         success_rate = st.slider("접촉 고객의 추가 유지 성공률 가정", 0.0, 0.5, 0.10, 0.01, key="campaign_success_rate")
     with assumption_right:
         st.markdown(
-            '<div class="note-card"><b>연동 입력</b><br>예산·인원·상위 비율 중 마지막으로 수정한 값을 기준으로 나머지를 자동 환산합니다.</div>',
+            '<div class="note-card"><b>대상 기준</b><br>선택한 Threshold와 최소 신호 수를 모두 충족해야 계획 후보가 됩니다. 예산·인원·비율은 서로 연동됩니다.</div>',
             unsafe_allow_html=True,
         )
 
-    counts = base.groupby("plan")["probability"].agg(["size", "mean"])
+    threshold = float(scenario["threshold"])
+    eligible = planning_source.loc[
+        planning_source["probability"].ge(threshold)
+        & planning_source["risk_signal_count"].ge(min_signal_count)
+    ]
+    counts = eligible.groupby("plan")["probability"].agg(["size", "mean"]).reindex(plan_order)
     economic_defaults = plan_economic_assumptions(plan_order).set_index("plan")
     config = st.data_editor(
         pd.DataFrame({
             "구독 유형": plan_order,
-            "보유 고객": [int(counts.loc[plan, "size"]) for plan in plan_order],
-            "평균 위험 점수": [float(counts.loc[plan, "mean"]) for plan in plan_order],
+            "조건 충족 고객": [int(counts.loc[plan, "size"]) if pd.notna(counts.loc[plan, "size"]) else 0 for plan in plan_order],
+            "평균 위험 점수": [float(counts.loc[plan, "mean"]) if pd.notna(counts.loc[plan, "mean"]) else 0.0 for plan in plan_order],
             "기본 접촉 채널": [str(economic_defaults.loc[plan, "default_channel"]) for plan in plan_order],
             "포함": True,
             "1인 캠페인 변동비(원)": [int(economic_defaults.loc[plan, "contact_cost"]) for plan in plan_order],
             "연간 매출 대용치(원)": [int(economic_defaults.loc[plan, "customer_value"]) for plan in plan_order],
         }),
         hide_index=True,
-        disabled=["구독 유형", "보유 고객", "평균 위험 점수", "기본 접촉 채널"],
+        disabled=["구독 유형", "조건 충족 고객", "평균 위험 점수", "기본 접촉 채널"],
         column_config={
             "평균 위험 점수": st.column_config.NumberColumn("평균 위험 점수", format="percent"),
             "포함": st.column_config.CheckboxColumn("포함"),
@@ -733,18 +805,39 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         st.dataframe(assumption_view, hide_index=True, width="stretch")
         st.caption("PlaylistPro의 가격·마진·채널 원가가 없어 [외부 공개 음악 구독 요금](https://www.spotify.com/kr-ko/premium/)을 부가세 제외 연간 매출로 환산했습니다(2026-07-22 기준). Free는 근거가 없어 0원이며, 모든 값은 편집 가능한 계획 가정입니다. LTV·기여이익이 아닙니다.")
 
+    allocation_mode = st.radio(
+        "대상 배분 기준",
+        list(CAMPAIGN_ALLOCATION_MODES),
+        format_func=CAMPAIGN_ALLOCATION_MODES.get,
+        horizontal=True,
+        key="campaign_allocation_mode",
+        help="권장안은 행동별 효과를 아직 모르는 파일럿 단계에서 특정 요금제나 행동 하나에 전체 예산이 몰리지 않도록 합니다.",
+    )
+
     included = [plan for plan in plan_order if bool(config.loc[plan, "포함"])]
     if not included:
         st.warning("계획에 포함할 구독 유형을 하나 이상 선택해 주세요.")
         return
-    work = base.loc[base["plan"].isin(included)].copy()
-    work["cost"] = work["plan"].map(config["1인 캠페인 변동비(원)"].astype(float))
-    work["customer_value"] = work["plan"].map(config["연간 매출 대용치(원)"].astype(float))
-    work["assumed_net_value"] = work["probability"] * success_rate * work["customer_value"] - work["cost"]
-    uniform_economics = config.loc[included, "1인 캠페인 변동비(원)"].nunique() == 1 and config.loc[included, "연간 매출 대용치(원)"].nunique() == 1
-    sort_columns = ["probability"] if uniform_economics else ["assumed_net_value", "probability"]
-    work = work.sort_values(sort_columns, ascending=False).reset_index(drop=True)
+    economics = config.loc[included].reset_index()[
+        ["구독 유형", "1인 캠페인 변동비(원)", "연간 매출 대용치(원)"]
+    ].rename(columns={
+        "구독 유형": "plan",
+        "1인 캠페인 변동비(원)": "cost",
+        "연간 매출 대용치(원)": "customer_value",
+    })
+    work = _prepare_campaign_plan(
+        strategy_queue,
+        test,
+        economics,
+        threshold,
+        min_signal_count,
+        success_rate,
+        allocation_mode,
+    )
     pool = len(work)
+    if not pool:
+        st.warning("현재 Threshold·행동 신호·구독 유형 조건을 모두 충족하는 고객이 없습니다.")
+        return
     cumulative_spend = work["cost"].cumsum().to_numpy()
 
     driver = state["campaign_driver"]
@@ -774,22 +867,44 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         b.number_input("연락 인원(명)", min_value=0, max_value=pool, step=50, key="campaign_count", on_change=set_campaign_driver, args=("count",))
         c.number_input("상위 위험군(%)", min_value=0.0, max_value=100.0, step=0.5, key="campaign_percent", on_change=set_campaign_driver, args=("percent",))
 
-    sort_label = "위험 점수 순" if uniform_economics else "사용자 가정 매출효과-비용 순"
-    st.caption(f"대상 풀 {pool:,}명 · 현재 정렬 기준: {sort_label} · 제공 test.csv에는 정답 라벨이 없습니다.")
+    sort_label = CAMPAIGN_ALLOCATION_MODES[allocation_mode]
+    st.caption(
+        f"조건 충족 풀 {pool:,}명 · Threshold ≥ {threshold:.2f} · 행동 신호 ≥ {min_signal_count}개 · "
+        f"현재 배분: {sort_label} · test.csv에는 정답 라벨이 없습니다."
+    )
+    selected_action_count = int(selected["primary_action"].nunique()) if selected_count else 0
+    mean_signals = float(selected["risk_signal_count"].mean()) if selected_count else 0.0
     for column, item in zip(st.columns(4), [
-        ("가정 집행액", f"{spend:,.0f}원", f"{selected_count:,}명 검토"),
-        ("위험 점수 합계", f"{risk_score_sum:,.0f}", f"평균 {risk_score_sum / selected_count:.1%}" if selected_count else "-"),
-        ("가정 추가 유지", f"{assumed_retained:,.1f}명", f"성공률 가정 {success_rate:.0%}"),
-        ("가정 매출효과-비용", f"{assumed_net:,.0f}원", f"매출효과/비용 {assumed_benefit / spend:.1f}배" if spend else "-"),
+        ("계획 연락", f"{selected_count:,}명", f"조건 충족 풀의 {selected_count / pool:.1%}"),
+        ("가정 집행액", f"{spend:,.0f}원", f"1인 평균 {spend / selected_count:,.0f}원" if selected_count else "-"),
+        ("위험·행동 신호", f"{risk_score_sum / selected_count:.1%}" if selected_count else "-", f"평균 신호 {mean_signals:.1f}개" if selected_count else "-"),
+        ("행동 경로", f"{selected_action_count}개", f"가정 추가 유지 {assumed_retained:,.1f}명"),
     ]):
         with column:
             metric_card(*item)
+    economics_note = (
+        f'가정 매출효과 <b>{assumed_benefit:,.0f}원</b> · '
+        f'변동비 차감값 <b>{assumed_net:,.0f}원</b> · '
+        f'매출효과/비용 <b>{assumed_benefit / spend:.1f}배</b>'
+        if spend else "현재 계획 집행액이 0원입니다."
+    )
+    st.markdown(f'<div class="note-card"><b>경제성 참고</b><br>{economics_note}</div>', unsafe_allow_html=True)
+    if selected_count:
+        plan_share = selected["plan"].value_counts(normalize=True)
+        action_share = selected["primary_action"].value_counts(normalize=True)
+        dominant_label, dominant_share = (
+            (f"구독 유형 '{plan_share.index[0]}'", float(plan_share.iloc[0]))
+            if float(plan_share.iloc[0]) >= float(action_share.iloc[0])
+            else (f"행동 '{action_share.index[0]}'", float(action_share.iloc[0]))
+        )
+        if dominant_share >= 0.8:
+            st.warning(f"현재 계획의 {dominant_share:.1%}가 {dominant_label}에 집중됩니다. 배분 기준이나 포함 구독 유형을 확인해 주세요.")
 
-    st.markdown('<div class="section-label">캠페인 퍼널과 구독 유형별 배정</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">캠페인 퍼널과 유지 행동별 배정</div>', unsafe_allow_html=True)
     funnel_col, allocation_col = st.columns([1.2, 1])
     with funnel_col:
         funnel = go.Figure(go.Funnel(
-            y=["선택 구독 유형 고객", "연락 대상", "위험 점수 합계", "가정 유지 전환"],
+            y=["Threshold·신호 조건 충족", "계획 연락", "모델 위험도 합계", "가정 추가 유지"],
             x=[pool, selected_count, risk_score_sum, assumed_retained],
             textinfo="value+percent initial",
             marker={"color": ["#315d78", "#e4573d", "#e8a23a", "#2f7d62"]},
@@ -798,11 +913,10 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         funnel.update_layout(title="가정 기반 캠페인 퍼널")
         st.plotly_chart(plot_style(funnel, 360), width="stretch")
     with allocation_col:
-        allocation = selected.groupby("plan", observed=True).agg(
-            연락배정=("customer_id", "size"), 위험점수합계=("probability", "sum"), 가정집행액=("cost", "sum")
-        ).reindex(plan_order, fill_value=0).reset_index().rename(columns={"plan": "구독 유형"})
-        fig = px.bar(allocation, x="구독 유형", y="연락배정", color="위험점수합계", text="연락배정", color_continuous_scale=["#dce8ef", "#e4573d"])
-        fig.update_layout(title="구독 유형별 연락 배정", xaxis_title=None, yaxis_title="연락 인원", coloraxis_colorbar_title="위험 점수 합계")
+        allocation = selected.groupby(["primary_action", "plan"], observed=True).size().reset_index(name="연락 배정")
+        allocation = allocation.rename(columns={"primary_action": "유지 행동", "plan": "구독 유형"})
+        fig = px.bar(allocation, x="연락 배정", y="유지 행동", color="구독 유형", orientation="h", text="연락 배정")
+        fig.update_layout(title="유지 행동별 연락 배정", xaxis_title="연락 인원", yaxis_title=None, legend_title="구독 유형", barmode="stack")
         st.plotly_chart(plot_style(fig, 360), width="stretch")
 
     st.markdown('<div class="section-label">연락 범위별 가정 매출효과-비용 곡선</div>', unsafe_allow_html=True)
@@ -821,7 +935,6 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         if fixed_cost is not None:
             ordered["cost"] = fixed_cost
             ordered["assumed_net_value"] = ordered["probability"] * success_rate * ordered["customer_value"] - fixed_cost
-            ordered = ordered.sort_values(["assumed_net_value", "probability"], ascending=False)
         cumulative_benefit = (ordered["probability"] * success_rate * ordered["customer_value"]).cumsum().to_numpy()
         cumulative_net = (cumulative_benefit - ordered["cost"].cumsum().to_numpy()) / 1_000_000
         x = np.arange(1, len(ordered) + 1) / len(ordered) * 100
@@ -829,8 +942,12 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         indexes = np.unique(np.concatenate([np.arange(0, len(ordered), step), [len(ordered) - 1]]))
         return x[indexes], cumulative_net[indexes]
 
-    curve_tabs = st.tabs(["전체"] + plan_order)
-    frames = [("전체", work)] + [(plan, work.loc[work["plan"].eq(plan)].reset_index(drop=True)) for plan in plan_order]
+    active_plan_order = [plan for plan in plan_order if plan in included]
+    curve_tabs = st.tabs(["전체"] + active_plan_order)
+    frames = [("전체", work)] + [
+        (plan, work.loc[work["plan"].eq(plan)].reset_index(drop=True))
+        for plan in active_plan_order
+    ]
     for tab, (name, frame) in zip(curve_tabs, frames):
         with tab:
             fig = go.Figure()
@@ -845,9 +962,9 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
                     marker_index = int(np.argmin(np.abs(x - selected_count / pool * 100)))
                     fig.add_trace(go.Scatter(x=[x[marker_index]], y=[y[marker_index]], mode="markers", name="현재 계획", marker={"size": 12, "color": COLORS["navy"]}))
             fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
-            fig.update_layout(title=f"{name} · 연락 범위별 가정 매출효과-비용", xaxis_title="그룹 내 상위 위험 고객 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 매출효과-비용(백만원)", legend_orientation="h")
+            fig.update_layout(title=f"{name} · 연락 범위별 가정 매출효과-비용", xaxis_title="현재 배분 순서 기준 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 매출효과-비용(백만원)", legend_orientation="h")
             st.plotly_chart(plot_style(fig, 390), width="stretch")
-    st.caption("모든 편익·ROI·유지 전환 값은 사용자 입력 가정에 따른 민감도 분석입니다. 실제 성과는 대조군을 둔 캠페인 실험과 미래 라벨로 검증해야 합니다.")
+    st.caption("추가 유지·매출효과·비용 차감값은 사용자 입력 가정에 따른 민감도 분석입니다. 실제 효과는 행동 경로별 대조군을 둔 캠페인 실험과 미래 라벨로 검증해야 합니다.")
 
 
 def prioritization_page(tables: dict, model, scenario: pd.Series) -> None:
@@ -988,7 +1105,7 @@ def prioritization_page(tables: dict, model, scenario: pd.Series) -> None:
         st.caption("행동 후보는 자동 실행되지 않으며 모든 행의 selected_action은 담당자 미검토 상태로 내려받습니다. test 데이터에는 정답 라벨이 없습니다.")
 
     with planning_tab:
-        campaign_planning_panel(test, predictions, scenario)
+        campaign_planning_panel(test, tables["strategy_queue"], scenario)
 
     boundary_note()
 
