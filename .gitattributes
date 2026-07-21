@@ -1,0 +1,7 @@
+*.joblib -text
+*.npy -text
+*.npz -text
+*.pdf -text
+*.png -text
+*.pptx -text
+*.zip -text
