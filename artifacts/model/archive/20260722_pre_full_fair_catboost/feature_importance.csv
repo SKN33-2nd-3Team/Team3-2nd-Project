@@ -1,0 +1,50 @@
+﻿feature,importance,rank
+weekly_hours,0.2405288837913339,1
+subscription_type_Free,0.2019934611954215,2
+customer_service_inquiries_High,0.1284966939756263,3
+customer_service_inquiries_Low,0.11960767253425751,4
+num_subscription_pauses,0.08634094361148557,5
+song_skip_rate,0.07662598939032732,6
+age,0.06783150379237302,7
+subscription_type_Student,0.05600904306273398,8
+notifications_clicked,0.01146572346043001,9
+subscription_type_Premium,0.005497834179732461,10
+weekly_unique_songs,0.003537246667321959,11
+subscription_type_Family,0.0020650043389564693,12
+num_playlists_created,0.0,13
+num_platform_friends,0.0,14
+average_session_length,0.0,15
+num_favorite_artists,0.0,16
+weekly_songs_played,0.0,17
+friends_per_playlist,0.0,18
+hours_per_song,0.0,19
+shared_playlist_ratio,0.0,20
+unique_song_ratio,0.0,21
+signup_days_ago,0.0,22
+num_shared_playlists,0.0,23
+location_Alabama,0.0,24
+location_California,0.0,25
+location_New Jersey,0.0,26
+location_New York,0.0,27
+location_Florida,0.0,28
+location_Georgia,0.0,29
+location_Idaho,0.0,30
+location_Maine,0.0,31
+location_Montana,0.0,32
+location_Nebrasksa,0.0,33
+location_Virginia,0.0,34
+location_Vermont,0.0,35
+location_Utah,0.0,36
+location_South Carolina,0.0,37
+location_North Dakota,0.0,38
+location_North Carolina,0.0,39
+location_Wisconsin,0.0,40
+location_West Virginia,0.0,41
+payment_plan_Monthly,0.0,42
+location_Washington,0.0,43
+payment_plan_Yearly,0.0,44
+payment_method_Apple Pay,0.0,45
+payment_method_Debit Card,0.0,46
+payment_method_Credit Card,0.0,47
+payment_method_Paypal,0.0,48
+customer_service_inquiries_Medium,0.0,49

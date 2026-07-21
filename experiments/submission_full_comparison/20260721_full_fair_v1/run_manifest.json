@@ -1,0 +1,55 @@
+{
+  "run_id": "20260721_full_fair_v1",
+  "status": "COMPLETED_LOCAL_APP_PROMOTED",
+  "last_checkpoint": "local_app_promotion",
+  "checkpoints": {
+    "repository_and_data_audit": "PASSED",
+    "fair_fold_assignment": "PASSED",
+    "insight_inventory": "PASSED",
+    "preprocessing_experiments": "PASSED",
+    "final_common_feature_set": "PASSED",
+    "eight_model_baseline": "PASSED",
+    "seven_model_random_search": "PASSED",
+    "top3_selection": "PASSED",
+    "top3_fine_tuning": "PASSED",
+    "seed_stability": "PASSED",
+    "bootstrap": "PASSED",
+    "calibration_and_operations": "PASSED",
+    "segment_errors": "PASSED",
+    "candidate_save_reload": "PASSED",
+    "app_schema_smoke_test": "PASSED",
+    "presentation_evidence": "PASSED",
+    "instructor_audit": "PASSED",
+    "setup": "RECOVERED"
+  },
+  "completed_models": [
+    "catboost",
+    "decision_tree",
+    "dummy",
+    "gradient_boosting",
+    "lightgbm",
+    "logistic",
+    "random_forest",
+    "xgboost"
+  ],
+  "completed_trials": {
+    "logistic": 20,
+    "decision_tree": 20,
+    "random_forest": 24,
+    "xgboost": 30,
+    "lightgbm": 30,
+    "catboost": 24,
+    "gradient_boosting": 24
+  },
+  "blocked_reason": null,
+  "resume_command": "python scripts/run_full_fair_comparison.py --stage all",
+  "provisional_feature_variant": "log_numeric",
+  "tree_validator": "catboost",
+  "final_feature_variant": "log_numeric",
+  "top3": [
+    "catboost",
+    "xgboost",
+    "lightgbm"
+  ],
+  "candidate_model": "catboost"
+}

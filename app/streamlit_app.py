@@ -22,10 +22,10 @@ DATA_DIR = ROOT / "data"
 ARTIFACT_DIR = ROOT / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model" / "music_churn_pipeline.joblib"
 METADATA_PATH = ARTIFACT_DIR / "model" / "metadata.json"
-TARGETING_PATH = ARTIFACT_DIR / "targeting_metrics_test.csv"
-DECILE_PATH = ARTIFACT_DIR / "decile_calibration_test.csv"
-SCENARIOS_PATH = ARTIFACT_DIR / "operating_scenarios.csv"
-CANDIDATE_METADATA_PATH = ROOT / "models" / "candidates" / "20260721_submission_bounded_v1" / "metadata.json"
+TARGETING_PATH = ARTIFACT_DIR / "topk_lift_oof_catboost.csv"
+DECILE_PATH = ARTIFACT_DIR / "risk_decile_oof_catboost.csv"
+SCENARIOS_PATH = ARTIFACT_DIR / "operating_scenarios_oof_catboost.csv"
+CANDIDATE_METADATA_PATH = ROOT / "models" / "candidates" / "20260721_full_fair_v1" / "metadata.json"
 PROGRESSION_PATH = ARTIFACT_DIR / "performance_progression.csv"
 DECISION_MATRIX_PATH = ARTIFACT_DIR / "model_selection_decision_matrix.csv"
 INSIGHT_INVENTORY_PATH = ARTIFACT_DIR / "current_insight_inventory.csv"
@@ -104,8 +104,10 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 @st.cache_resource(show_spinner=False)
 def load_model():
-    # Importing the module registers the serialized custom transformer class.
-    from src.features import MusicFeatureEngineer  # noqa: F401
+    # The completed full-fair candidate serializes this deterministic transformer.
+    from scripts.run_full_fair_comparison import Features
+
+    setattr(sys.modules["__main__"], "Features", Features)
 
     return joblib.load(MODEL_PATH)
 
@@ -121,8 +123,8 @@ def load_artifacts() -> tuple[
     pd.DataFrame,
     pd.DataFrame,
 ]:
-    comparison = pd.read_csv(ARTIFACT_DIR / "model_comparison.csv")
-    threshold = pd.read_csv(ARTIFACT_DIR / "threshold_sweep_validation.csv")
+    comparison = pd.read_csv(FAIR_COMPARISON_PATH)
+    threshold = pd.read_csv(ARTIFACT_DIR / "threshold_sweep_oof_catboost.csv")
     importance_path = ARTIFACT_DIR / "feature_importance.csv"
     importance = pd.read_csv(importance_path) if importance_path.exists() else pd.DataFrame(columns=["feature", "importance", "rank"])
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
@@ -1276,6 +1278,117 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
             if p not in included:
                 note += " (현재 산식에서 제외됨 — 곡선은 참고용)"
             st.markdown(f'<div class="small-caption">{note}</div>', unsafe_allow_html=True)
+
+
+def final_candidate_status_card(candidate: dict):
+    """Status card for the promoted full-fair model, without a false holdout claim."""
+    metrics = candidate.get("metrics", {})
+    if "five_fold_oof" in metrics:
+        metrics = metrics["five_fold_oof"]
+    name = str(candidate.get("candidate_model", candidate.get("model", "unknown"))).upper()
+    st.markdown(
+        f'<div class="info-card"><b>Selected model: {name}</b><br>'
+        'All model-quality values below are from saved five-fold out-of-fold predictions. '
+        'They are not external-holdout results, campaign uplift, ROI, or a verified future prediction horizon.</div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("OOF PR-AUC", f"{metrics.get('pr_auc', float('nan')):.3f}", "fine-tuned candidate")
+    with c2:
+        metric_card("OOF Recall / Precision", f"{metrics.get('recall', float('nan')):.1%} / {metrics.get('precision', float('nan')):.1%}", "threshold 0.50 reference")
+    with c3:
+        reload_ok = candidate.get("reload_verified", candidate.get("reload_validation", {}).get("verified", False))
+        metric_card("Reload validation", "Passed" if reload_ok else "Not verified", "saved artifact")
+
+
+def project_summary_v3(train: pd.DataFrame, test: pd.DataFrame, metadata: dict, candidate: dict, targeting: pd.DataFrame):
+    header("Project summary", "Insight-led churn-risk prioritization with the selected CatBoost model.")
+    top30 = targeting.loc[targeting["top_percent"].eq(30)]
+    metrics = metadata.get("metrics", {}).get("five_fold_oof", {})
+    st.markdown(
+        '<div class="hero"><div class="eyebrow" style="color:#ffb3a4">DECISION SUPPORT</div>'
+        '<h1>Prioritize customers by risk score; choose the contact policy explicitly.</h1>'
+        '<p>CatBoost is the local scoring pipeline after a common-feature, 8-model comparison. The model ranks observed labels; it does not establish causality or prove campaign impact.</p></div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: metric_card("Training customers", f"{len(train):,}", "observed churn label")
+    with c2: metric_card("Scored test customers", f"{len(test):,}", "labels unavailable")
+    with c3: metric_card("Selected model", "CatBoost", "fine-tuned full fair run")
+    with c4: metric_card("OOF PR-AUC", f"{metrics.get('pr_auc', float('nan')):.3f}", "five-fold OOF")
+    if not top30.empty:
+        row = top30.iloc[0]
+        st.info(
+            f"At the top 30% of saved OOF risk scores ({int(row.target_customers):,} customers), "
+            f"the ranking captures {float(row.capture_rate):.1%} of observed positives. "
+            "This supports capacity planning only; it is not measured campaign uplift."
+        )
+    final_candidate_status_card(metadata)
+
+
+def improvement_journey_v3(preprocessing_register: pd.DataFrame, fair_comparison: pd.DataFrame, candidate: dict):
+    header("Model improvement journey", "Preprocessing choices and the final fair-comparison decision.")
+    st.info("The selected common feature set is `log_numeric`: deterministic ratios plus log transforms. No target-derived encoding was used.")
+    if not preprocessing_register.empty:
+        st.dataframe(preprocessing_register, hide_index=True, width="stretch")
+    if not fair_comparison.empty:
+        ordered = fair_comparison.sort_values("pr_auc", ascending=False)
+        fig = px.bar(ordered, x="model", y="pr_auc", color="model", text=ordered["pr_auc"].map(lambda value: f"{value:.3f}"))
+        fig.update_layout(title="Common-feature 5-fold OOF PR-AUC", showlegend=False, yaxis_title="PR-AUC")
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    final_candidate_status_card(candidate)
+
+
+def model_comparison_v3(fair_comparison: pd.DataFrame, candidate: dict):
+    header("Model comparison and selection", "Eight models under one feature set and one fixed 5-fold split.")
+    if fair_comparison.empty:
+        st.warning("The saved fair-comparison table is unavailable.")
+        return
+    ordered = fair_comparison.sort_values("pr_auc", ascending=False).reset_index(drop=True)
+    cat = ordered.loc[ordered["model"].eq("catboost")].iloc[0]
+    runner_up = ordered.iloc[1]
+    st.success(
+        f"CatBoost was selected: fine-tuned CV PR-AUC is the highest among the top three, and its baseline OOF PR-AUC is {float(cat.pr_auc):.4f}. "
+        f"The closest baseline runner-up is {runner_up.model} at {float(runner_up.pr_auc):.4f}."
+    )
+    display = ordered[["model", "pr_auc", "roc_auc", "f1", "recall", "precision", "fn", "fp", "seconds"]]
+    st.dataframe(display, hide_index=True, width="stretch")
+    final_candidate_status_card(candidate)
+
+
+def operations_v3(targeting: pd.DataFrame, deciles: pd.DataFrame, scenarios: pd.DataFrame):
+    header("Operating scenarios", "Choose customer-contact capacity and the recall/precision trade-off; no action is executed from this app.")
+    scenario_ids = scenarios["scenario_id"].tolist()
+    selected_id = st.selectbox("Scenario", scenario_ids, format_func=lambda value: scenario_label(get_scenario(scenarios, value)))
+    active = get_scenario(scenarios, selected_id)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: metric_card("Target rate", f"{float(active.oof_target_rate):.1%}", "five-fold OOF")
+    with c2: metric_card("Recall", f"{float(active.oof_recall):.1%}", "observed positives captured")
+    with c3: metric_card("Precision", f"{float(active.oof_precision):.1%}", "contact-list yield")
+    with c4: metric_card("FN / FP", f"{int(active.oof_fn):,} / {int(active.oof_fp):,}", "same OOF scenario")
+    st.info(f"{active.scenario_label}: {active.selection_rule} Threshold={float(active.threshold):.2f}. OOF evidence only; not external-holdout or campaign-effect evidence.")
+    st.dataframe(scenarios[["scenario_label", "threshold", "oof_target_rate", "oof_precision", "oof_recall", "oof_f1", "oof_fn", "oof_fp"]], hide_index=True, width="stretch")
+    left, right = st.columns(2)
+    with left:
+        fig = go.Figure(go.Bar(x=targeting["top_percent"].map(lambda value: f"Top {value:g}%"), y=targeting["capture_rate"], text=targeting["capture_rate"].map(lambda value: f"{value:.1%}"), textposition="outside", marker_color="#E4573D"))
+        fig.update_layout(title="OOF Top-K capture", yaxis_tickformat=".0%", yaxis_range=[0, 1.08], showlegend=False)
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    with right:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["actual_churn_rate"], name="Observed label", marker_color="#E4573D"))
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["mean_predicted_probability"], name="Predicted probability", marker_color="#315A7D"))
+        fig.update_layout(title="OOF risk-decile diagnostic", barmode="group", yaxis_tickformat=".0%", xaxis_title="Decile (10 = highest risk)")
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    st.caption("Thresholds are decision-support options. CRM sending, discounts, customer contact, uplift, and final business approval are outside this app.")
+
+
+# Keep the existing navigation while replacing its legacy GradientBoosting/P0 views.
+candidate_status_card = final_candidate_status_card
+project_summary_v2 = project_summary_v3
+improvement_journey_v2 = improvement_journey_v3
+model_comparison_v2 = model_comparison_v3
+operations_v2 = operations_v3
 
 
 def main():

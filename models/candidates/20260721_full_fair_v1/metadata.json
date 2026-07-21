@@ -1,0 +1,19 @@
+{
+  "run_id": "20260721_full_fair_v1",
+  "status": "COMPLETED_FULL_FAIR_SELECTED_FOR_LOCAL_APP",
+  "candidate_model": "catboost",
+  "selection": "highest fine-tuned CV PR-AUC; OOF/seed/bootstrap operational evidence",
+  "reload_verified": true,
+  "no_external_holdout": "No untouched external or final holdout was available for the full comparison run.",
+  "metrics": {
+    "pr_auc": 0.9478973394900623,
+    "roc_auc": 0.9419585884019898,
+    "f1": 0.8491176447323667,
+    "recall": 0.8363823355252906,
+    "precision": 0.8622467830808527,
+    "fn": 10500,
+    "fp": 8575,
+    "tn": 52251,
+    "tp": 53674
+  }
+}
