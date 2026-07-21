@@ -2,9 +2,9 @@
   "run_id": "20260721_full_fair_v1",
   "status": "FULL_COMPARISON_COMPLETED_CANDIDATE_AWAITING_BUSINESS_REVIEW",
   "candidate_model": "catboost",
-  "selection": "highest fine-tuned CV PR-AUC; OOF/seed/bootstrap operational evidence",
+  "selection": "Fine-tuned CV PR-AUC 최고, OOF·Seed·Bootstrap 운영 근거를 함께 검토",
   "reload_verified": true,
-  "no_external_holdout": "No untouched external or final holdout was available for the full comparison run.",
+  "no_external_holdout": "전체 비교 Run에 독립된 외부 또는 최종 라벨 Holdout이 없습니다.",
   "metrics": {
     "pr_auc": 0.9478973394900623,
     "roc_auc": 0.9419585884019898,
@@ -158,10 +158,10 @@
   "artifact_sha256": "fc35ca91e9242dbc0e914db9f0dfc9e994024a5d4cc8d0d770d12321989a7d0e",
   "schema_smoke_test": "artifacts/app_schema_smoke_test.csv",
   "known_limitations": [
-    "No untouched external labeled holdout is available for this run.",
-    "No prediction horizon or churn event timestamp was supplied.",
-    "OOF ranking evidence is not campaign uplift or causal effect evidence.",
-    "The operating threshold requires a business decision about contact capacity and FN cost."
+    "독립된 외부 라벨 Holdout이 없습니다.",
+    "예측 기간과 이탈 사건 시점이 제공되지 않았습니다.",
+    "OOF 순위 근거는 캠페인 Uplift나 인과효과가 아닙니다.",
+    "운영 Threshold는 접촉 가능 인원과 FN 비용에 대한 사업 결정이 필요합니다."
   ],
   "finalized_at_utc": "2026-07-21T18:21:24.001932+00:00"
 }

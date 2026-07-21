@@ -69,7 +69,7 @@ class FullFairCandidateSchemaTest(unittest.TestCase):
 
     def test_metadata_records_validation_boundary(self) -> None:
         self.assertTrue(self.metadata["fresh_process_reload_verified"])
-        self.assertIn("No untouched external labeled holdout", self.metadata["known_limitations"][0])
+        self.assertIn("독립된 외부 라벨 Holdout", self.metadata["known_limitations"][0])
         self.assertEqual(self.metadata["candidate_model"], "catboost")
 
 

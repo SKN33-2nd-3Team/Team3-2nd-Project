@@ -1,12 +1,11 @@
-# Current Insight Inventory
+# 현재 고객 인사이트 목록
 
-```text
-insight_id                                                           insight                             evidence                     evidence_file                status            related_features                                  actionability                           limitation
-       I01 Low weekly listening and high skip rate are associated with label EDA rate charts / feature importance repository audit / named artifact VALIDATED_ASSOCIATION weekly_hours,song_skip_rate Prioritize diagnostic segment; no causal claim                     No time ordering
-       I02                         Free subscription has high observed churn                EDA categorical rates repository audit / named artifact VALIDATED_ASSOCIATION           subscription_type                          Offer hypothesis only                 Offer effect unknown
-       I03                  High service inquiries are associated with label                EDA categorical rates repository audit / named artifact VALIDATED_ASSOCIATION  customer_service_inquiries       Service-resolution experiment hypothesis                     Association only
-       I04                              Pauses and age add predictive signal               feature_importance.csv repository audit / named artifact       MODEL_SUPPORTED num_subscription_pauses,age              Use age only with fairness review         Age actionability restricted
-       I05                    Top-K risk ranking captures observed positives               P0 targeting artifacts repository audit / named artifact       MODEL_SUPPORTED           model probability                         Capacity planning only P0 reference, not selection evidence
-```
+| ID | 관찰 내용 | 활용 방향 | 한계 |
+| --- | --- | --- | --- |
+| I01 | 주간 청취시간이 낮고 스킵률이 높을수록 `churned`와 연관성이 관찰됨 | 활동 저하 진단 세그먼트 | 시간 순서와 인과관계 미확인 |
+| I02 | Free 구독 유형에서 높은 관측 이탈률이 나타남 | 전환 제안 실험 가설 | 제안 효과 미확인 |
+| I03 | 고객 문의 수준이 높을수록 `churned`와 연관성이 관찰됨 | 문의 해결 품질·속도 개선 실험 | 연관성만 확인 |
+| I04 | 일시정지 횟수와 나이가 예측 신호에 기여함 | 진단 Feature | 나이는 공정성 검토가 필요하며 직접 조치 근거가 아님 |
+| I05 | 상위 위험 점수가 관측 이탈 라벨을 집중적으로 포함함 | 접촉 용량 계획 | 캠페인 Uplift가 아님 |
 
-All associations are non-causal.
+모든 관찰은 비인과적 근거입니다. 고객 조치의 효과는 통제 실험으로 별도 검증해야 합니다.

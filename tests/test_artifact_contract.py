@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import unittest
 from pathlib import Path
@@ -41,10 +42,12 @@ class ArtifactContractTest(unittest.TestCase):
         self.assertTrue(targeting["capture_rate"].is_monotonic_increasing)
 
     def test_saved_pipeline_scores_the_committed_schema(self) -> None:
-        from scripts.run_full_fair_comparison import Features
-
-        setattr(sys.modules["__main__"], "Features", Features)
-        model = joblib.load(self.artifacts / "model" / "music_churn_pipeline.joblib")
+        model_path = self.artifacts / "model" / "music_churn_pipeline.joblib"
+        actual_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
+        self.assertEqual(actual_hash, self.metadata["artifact_sha256"])
+        model = joblib.load(model_path)
+        transformer = model.named_steps["features"]
+        self.assertEqual(type(transformer).__module__, "src.full_fair_features")
         test = pd.read_csv(ROOT / "data" / "test.csv")
         row = test.loc[:, self.metadata["input_columns"]].head(1)
         probability = model.predict_proba(row)[:, 1]

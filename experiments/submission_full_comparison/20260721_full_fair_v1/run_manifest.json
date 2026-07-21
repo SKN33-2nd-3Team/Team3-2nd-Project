@@ -1,7 +1,7 @@
 {
   "run_id": "20260721_full_fair_v1",
-  "status": "COMPLETED_CANDIDATE_AWAITING_BUSINESS_REVIEW",
-  "last_checkpoint": "final_audit",
+  "status": "COMPLETED_LOCAL_APP_PROMOTED_AWAITING_BUSINESS_REVIEW",
+  "last_checkpoint": "hardened_local_app_promotion",
   "checkpoints": {
     "repository_and_data_audit": "PASSED",
     "fair_fold_assignment": "PASSED",

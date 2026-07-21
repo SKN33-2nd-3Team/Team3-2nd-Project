@@ -1,5 +1,7 @@
 # Streamlit Presentation Improvement Audit
 
+> **과거 통합 전 감사 기록:** 현재 앱은 최종 CatBoost 모델과 OOF 운영 표로 교체됐습니다. 아래 내용은 변경 이력을 보존한 기록입니다.
+
 ## Audit scope
 
 This audit reviewed the Streamlit page flow, the saved inference artifact, the isolated LightGBM candidate metadata, saved P0 evidence CSVs, and the in-progress full-fair-comparison manifest. No model fitting, artifact replacement, or threshold reselection was performed.

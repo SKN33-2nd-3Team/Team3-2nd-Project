@@ -1,5 +1,7 @@
 # Streamlit Demo Script
 
+> **과거 데모 기록:** 현재 앱은 최종 CatBoost Pipeline을 사용합니다. 발표에는 `presentation_evidence_pack_v3.md`를 사용합니다.
+
 ## Demonstration order
 
 1. **Project Summary**

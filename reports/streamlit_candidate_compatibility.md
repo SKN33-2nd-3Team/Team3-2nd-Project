@@ -1,16 +1,14 @@
-# Full-fair candidate app-schema compatibility
+# 최종 CatBoost 앱 스키마 호환성
 
-The saved CatBoost candidate loads in a fresh Python process and preserves predictions after moving the stateless feature transformer to an importable module. This completion step performed a schema compatibility test only; it did not replace the operational Streamlit artifact already promoted from the same run.
+저장된 CatBoost 후보는 상태 없는 Feature 변환기를 고정된 `src` 모듈로 옮긴 뒤에도 예측값이 같았고, 새 Python 프로세스에서 별도 등록 코드 없이 로드됐습니다.
 
-| case | expected_behavior | actual_behavior | status | detail |
-| --- | --- | --- | --- | --- |
-| normal_schema | accepted | accepted | PASSED | prediction completed |
-| reordered_columns | accepted | accepted | PASSED | prediction completed |
-| unseen_category | accepted | accepted | PASSED | prediction completed |
-| extra_app_column | accepted | accepted | PASSED | prediction completed |
-| missing_required_numeric | rejected | rejected | PASSED | KeyError: 'weekly_hours' |
-| invalid_numeric_type | rejected | rejected | PASSED | TypeError: unsupported operand type(s) for /: 'str' and 'float' |
+| 검사 항목 | 기대 동작 | 실제 동작 | 상태 |
+| --- | --- | --- | --- |
+| 정상 스키마 | 허용 | 허용 | 통과 |
+| 열 순서 변경 | 허용 | 허용 | 통과 |
+| 미등록 범주 | 허용 | 허용 | 통과 |
+| 앱 전용 추가 열 | 허용 | 허용 | 통과 |
+| 필수 수치 열 누락 | 거부 | 거부 | 통과 |
+| 잘못된 수치 타입 | 거부 | 거부 | 통과 |
 
-- Reordered columns and unseen categories are accepted.
-- Missing required numeric fields and invalid numeric values are rejected instead of being silently coerced.
-- Candidate promotion, production approval, and the operating threshold remain user decisions.
+이 검사는 앱 입력 호환성과 안전한 실패를 확인한 것입니다. 독립 외부 Holdout 성능이나 캠페인 효과를 검증한 것은 아닙니다.

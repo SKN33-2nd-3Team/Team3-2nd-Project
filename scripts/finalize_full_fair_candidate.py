@@ -171,10 +171,10 @@ def main() -> None:
         "artifact_sha256": None,
         "schema_smoke_test": str(SMOKE_CSV.relative_to(ROOT)).replace("\\", "/"),
         "known_limitations": [
-            "No untouched external labeled holdout is available for this run.",
-            "No prediction horizon or churn event timestamp was supplied.",
-            "OOF ranking evidence is not campaign uplift or causal effect evidence.",
-            "The operating threshold requires a business decision about contact capacity and FN cost.",
+            "독립된 외부 라벨 Holdout이 없습니다.",
+            "예측 기간과 이탈 사건 시점이 제공되지 않았습니다.",
+            "OOF 순위 근거는 캠페인 Uplift나 인과효과가 아닙니다.",
+            "운영 Threshold는 접촉 가능 인원과 FN 비용에 대한 사업 결정이 필요합니다.",
         ],
         "finalized_at_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -192,12 +192,12 @@ def main() -> None:
         markdown_rows.append("| " + " | ".join(str(value).replace("|", "\\|") for value in row) + " |")
     table = "\n".join(markdown_rows)
     SMOKE_REPORT.write_text(
-        "# Full-fair candidate app-schema compatibility\n\n"
-        "The saved CatBoost candidate loads in a fresh Python process and preserves predictions after moving the stateless feature transformer to an importable module. This completion step performed a schema compatibility test only; it did not replace the operational Streamlit artifact already promoted from the same run.\n\n"
+        "# 최종 CatBoost 앱 스키마 호환성\n\n"
+        "저장된 CatBoost 후보는 상태 없는 Feature 변환기를 고정 모듈로 옮긴 뒤에도 예측값이 같고 새 Python 프로세스에서 로드됩니다. 이 검사는 입력 스키마 호환성 검사입니다.\n\n"
         f"{table}\n\n"
-        "- Reordered columns and unseen categories are accepted.\n"
-        "- Missing required numeric fields and invalid numeric values are rejected instead of being silently coerced.\n"
-        "- Candidate promotion, production approval, and the operating threshold remain user decisions.\n",
+        "- 열 순서 변경과 미등록 범주는 허용합니다.\n"
+        "- 필수 수치 열 누락과 잘못된 수치 값은 조용히 변환하지 않고 거부합니다.\n"
+        "- 실제 운영 Threshold와 사업 승인은 사용자가 결정합니다.\n",
         encoding="utf-8",
     )
 

@@ -1,5 +1,7 @@
 # Source Repository Audit
 
+> **최초 조사 기록:** 현재 운영 모델은 CatBoost이며 최종 상태는 `final_local_model_integration.md`를 기준으로 합니다. 아래 내용은 P0 시작 시점의 저장소 상태입니다.
+
 Audit time: 2026-07-21 (local repository snapshot)
 
 ## VERIFIED findings

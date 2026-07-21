@@ -1,5 +1,7 @@
 # Presentation Evidence Pack v2
 
+> **과거 P0 기록:** 현재 최종 모델과 발표 근거는 `presentation_evidence_pack_v3.md`의 CatBoost 결과를 사용합니다. 아래 LightGBM 내용은 최종 선정 이전 기록입니다.
+
 ## Recommended-for-review candidate
 
 **LightGBM** is the technical candidate because it had the highest saved validation PR-AUC among the eight required models (0.9457), retained that score after the bounded 3-trial/3-fold search, and generalized to an internal-holdout PR-AUC of 0.9486. The top single-score model and selected model are the same.

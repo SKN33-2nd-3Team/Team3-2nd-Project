@@ -1,5 +1,7 @@
 # PlaylistPro Presentation Storyline
 
+> **과거 발표 흐름:** 현재 발표는 최종 CatBoost 기준의 `presentation_evidence_pack_v3.md`를 사용합니다. 아래 내용은 통합 전 기록입니다.
+
 ## One-line story
 
 Use observed customer behavior to rank churn-risk review candidates, then choose contact coverage only after the business owner sets capacity and false-negative/false-positive trade-offs.

@@ -1,187 +1,70 @@
 # PlaylistPro Insight
 
-> 음악 스트리밍 가입 고객의 이탈 가능성을 예측하고, 리텐션 담당자의 고객 유지 활동 우선순위 결정을 지원하는 머신러닝 프로젝트
+고객별 구독·이용·문의 정보를 바탕으로 `churned` 라벨 위험을 순위화하고, 리텐션 담당자가 검토 대상 범위를 선택하도록 돕는 머신러닝 의사결정 지원 프로젝트입니다.
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
+## 현재 최종 상태
 
-문서 기준일은 **2026-07-21**이며, 모든 수치와 산출물은 `data/train.csv` 125,000행을 기준으로 작성했습니다.
+| 항목 | 결과 |
+| --- | --- |
+| 최종 모델 | CatBoost |
+| 공통 Feature | `log_numeric` |
+| 평가 방식 | 고정된 5-Fold OOF |
+| Fine-tuned CV PR-AUC | 0.947913 |
+| OOF PR-AUC / ROC-AUC | 0.947897 / 0.941959 |
+| 5개 Seed 평균 PR-AUC | 0.947880 |
+| 학습 데이터 | 125,000명, `churned` 포함 |
+| 점수 산출 데이터 | 75,000명, 정답 라벨 없음 |
 
-## 1. 프로젝트 개요
+CatBoost는 동일 Feature·동일 Fold로 비교한 8개 모델과 실제 상위 3개 정밀 탐색 결과를 근거로 선정했습니다. 독립된 외부 라벨 Holdout은 없으므로 성능 수치를 미래 일반화 성능이나 캠페인 효과로 표현하지 않습니다.
 
-### 문제 정의
+## 앱에서 할 수 있는 일
 
-> **리텐션·CRM 담당자**가 **어떤 고객에게 어떤 유지 활동을 배정할지** 결정할 수 있도록, 고객별 구독·이용·상담 프로필로 **이탈 여부(`churned`)**를 예측하고 위험 등급별 유지 활동을 제안합니다.
+- 고객 인사이트와 Feature 중요도 확인
+- 8개 모델 동일 조건 비교와 CatBoost 선정 과정 확인
+- 재현율 우선·균형형 F1·정밀도 우선 시나리오 비교
+- Top-K 포착률과 위험 Decile 진단 확인
+- `test.csv` 고객 단건 재추론과 배치 우선순위 CSV 생성
+- 접촉 비용·고객 가치·유지 전환율을 사용자가 넣는 가정 계산
 
-- Target: `churned` — `0`은 유지, `1`은 이탈
-- 분석 단위: 고객 1명 = 1행
-- 우선 지표: 이탈 Recall, PR-AUC
-- 오류 비용: FN:FP = `3:1` 가정
-- 운영 임계값: Validation 기대비용 최소점인 `0.30`
-- 활용 범위: 캠페인 검토 우선순위 지원. 자동 실행·고객 차단은 범위 밖
+앱은 CRM 발송, 할인 제공, 고객 접촉, 계정 조치를 실행하지 않습니다.
 
-데이터에 관측 기준일과 해지일이 없어 예측 시점·관찰 기간·결과 기간은 정의할 수 없습니다. 따라서 이 프로젝트는 **스냅샷 프로필로 제공 라벨을 판별하는 검증 프로젝트**이며, “향후 30일 내 이탈”처럼 시간 범위를 확장해 해석하지 않습니다.
+## 기본 운영 시나리오
 
-```mermaid
-flowchart LR
-    A["비즈니스 문제 정의"] --> B["데이터 점검·EDA"]
-    B --> C["분할 후 Pipeline 전처리"]
-    C --> D["동일 조건 모델 비교"]
-    D --> E["Validation 임계값 결정"]
-    E --> F["Test 최종 평가"]
-    F --> G["Pipeline 저장·재로딩"]
-    G --> H["Streamlit 예측·유지 활동"]
-```
+| 시나리오 | Threshold | 대상 비율 | Recall | Precision | FN | FP |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 재현율 우선 | 0.29 | 62.16% | 95.18% | 78.61% | 3,091 | 16,617 |
+| 균형형 F1 | 0.35 | 60.91% | 94.44% | 79.59% | 3,569 | 15,538 |
+| 정밀도 우선 | 0.74 | 38.77% | 71.80% | 95.07% | 18,099 | 2,388 |
 
-## 2. 주요 기능
+위 값은 모두 저장된 5-Fold OOF 예측에서 계산한 의사결정 참고값입니다. 어느 시나리오를 실제로 사용할지는 접촉 가능 인원과 FN·FP 비용을 바탕으로 사용자가 결정합니다.
 
-| 화면 | 제공 기능 |
-|---|---|
-| Overview | 데이터 계약, 클래스 비율, 핵심 관찰점, 위험 고객 현황 |
-| Data Explorer | 주요 변수 분포와 Target별 차이, 데이터 품질 점검 |
-| Model Lab | 후보 모델 성능, PR-AUC, 임계값 trade-off, Feature Importance |
-| Customer Scoring | 신규 고객 1명의 실제 이탈 확률·위험 등급·유지 활동 |
-| Batch Prioritization | `test.csv` 75,000명 일괄 예측, 고위험 고객 CSV 다운로드 |
-| Campaign Simulator | 단가·성공률·대상 비율에 따른 캠페인 손익 비교 |
-
-Streamlit은 실행 시 모델을 다시 학습하지 않고 저장된 `artifacts/model/music_churn_pipeline.joblib`을 불러옵니다. 입력값을 바꾸면 같은 Pipeline의 `predict_proba` 결과가 변경됩니다.
-
-## 3. 빠른 실행
-
-프로젝트 루트에서 다음 명령만 실행합니다.
+## 실행
 
 ```bash
 pip install -r requirements.txt
-python -m src.run_pipeline
 streamlit run app/streamlit_app.py
 ```
 
-브라우저에서 `http://localhost:8501`을 엽니다. 이미 생성된 모델과 산출물을 사용할 때는 두 번째 명령을 생략할 수 있습니다.
+앱은 모델을 다시 학습하지 않습니다. `artifacts/model/music_churn_pipeline.joblib`의 SHA-256을 메타데이터와 비교한 뒤 검증된 파일만 로드합니다.
 
-## 4. 프로젝트 구조
+## 핵심 산출물
 
-```text
-.
-├── README.md
-├── requirements.txt
-├── app/
-│   └── streamlit_app.py
-├── data/
-│   ├── train.csv
-│   └── test.csv
-├── docs/
-│   ├── README.md
-│   ├── requirements.md
-│   ├── data_card.md
-│   ├── data_dictionary.md
-│   ├── validation_plan.md
-│   └── submission_checklist.md
-├── reports/
-│   ├── preprocessing_report.md
-│   └── training_report.md
-├── src/
-│   ├── features.py
-│   └── run_pipeline.py
-├── scripts/
-│   ├── eda_insight.py
-│   └── business_levers.py
-└── artifacts/
-    ├── eda/                       # 전처리·EDA 이미지
-    ├── eda_insight/               # 핵심 인사이트 이미지와 보고서
-    ├── model/
-    │   ├── music_churn_pipeline.joblib
-    │   └── metadata.json
-    ├── model_comparison.csv
-    ├── threshold_sweep_validation.csv
-    ├── feature_importance.csv
-    └── test_predictions.csv
-```
+| 목적 | 파일 |
+| --- | --- |
+| 현재 모델 메타데이터 | [artifacts/model/metadata.json](artifacts/model/metadata.json) |
+| 최종 통합 결과 | [reports/final_local_model_integration.md](reports/final_local_model_integration.md) |
+| 모델 선정 근거 | [reports/final_model_selection_decision.md](reports/final_model_selection_decision.md) |
+| 학습·운영 결과 | [reports/training_report.md](reports/training_report.md) |
+| 검증 계획과 한계 | [docs/validation_plan.md](docs/validation_plan.md) |
+| 발표 근거 | [reports/presentation_evidence_pack_v3.md](reports/presentation_evidence_pack_v3.md) |
+| 현재 Streamlit 앱 | [app/streamlit_app.py](app/streamlit_app.py) |
 
-공지의 권장 구조와 이름이 다른 실행 파일은 위 실제 경로를 기준으로 사용합니다. 원본 CSV는 수정하지 않으며, 모든 코드에서 프로젝트 루트 기준 상대경로를 사용합니다.
+## 해석 한계
 
-## 5. 데이터 및 전처리
+- `churned`의 관측 기준일과 결과 기간이 없어 “향후 30일 이탈”처럼 해석할 수 없습니다.
+- OOF·Seed·Bootstrap은 내부 안정성 근거이며 독립 외부 Holdout을 대신하지 않습니다.
+- Feature 중요도와 세그먼트 차이는 연관성이지 인과관계가 아닙니다.
+- 실제 캠페인 Uplift·ROI는 A/B 테스트와 미래 결과 라벨로 별도 검증해야 합니다.
+- 데이터 라이선스·법적·조직적 적합성의 최종 승인은 담당 조직의 판단이 필요합니다.
 
-| 항목 | 내용 |
-|---|---|
-| 출처 | [Kaggle — Streaming Subscription Churn Model](https://www.kaggle.com/competitions/streaming-subscription-churn-model/data) |
-| 라이선스·다운로드 | MIT 표기, 2026-07-21 다운로드 |
-| 학습 데이터 | `data/train.csv`, 125,000행 × 20열 |
-| 추론 데이터 | `data/test.csv`, 75,000행 × 19열, 정답 없음 |
-| Target 분포 | 이탈 64,174명(51.34%), 유지 60,826명(48.66%) |
-| 품질 점검 | 결측 0건, 중복 0건, train/test 고객 ID 교집합 0건 |
-| 분할 | Train 60% / Validation 20% / Test 20%, `stratify=y`, `random_state=42` |
-
-전처리는 `MusicFeatureEngineer → ColumnTransformer → 모델` 순서의 단일 scikit-learn Pipeline으로 구성했습니다.
-
-- `customer_id`와 원본 `signup_date` 제거
-- 수치형: median 대치, 로지스틱 회귀에만 표준화
-- 범주형: 최빈값 대치 후 `OneHotEncoder(handle_unknown="ignore")`
-- 파생 Feature: `signup_days_ago`, `unique_song_ratio`, `shared_playlist_ratio`, `hours_per_song`, `friends_per_playlist`
-- 분할을 먼저 수행하고 전처리기는 Train에만 `fit`
-- SMOTE는 사용하지 않았습니다. 최종 Gradient Boosting에는 Class Weight를 적용하지 않았지만 일부 비교 후보에는 balanced 계열 Class Weight를 적용했습니다.
-
-자세한 근거와 결과는 [전처리 결과서](reports/preprocessing_report.md), [Data Card](docs/data_card.md), [데이터 사전](docs/data_dictionary.md)에서 확인할 수 있습니다.
-
-## 6. 모델 학습 및 평가
-
-모든 후보를 동일한 split과 지표로 비교했습니다. 각 후보의 임계값은 Validation에서 결정했으며, 고정된 임계값으로 각 모델을 Test에서 한 번씩 평가했습니다. Test 결과는 모델이나 임계값 선택에 사용하지 않았습니다.
-
-| 후보 | Val PR-AUC | Test PR-AUC | Test Recall* | Test Precision* |
-|---|---:|---:|---:|---:|
-| **Gradient Boosting (최종)** | **0.9446** | **0.9473** | **96.2%** | **76.8%** |
-| Random Forest | 0.9376 | 0.9409 | 94.4% | 77.2% |
-| Decision Tree | 0.9259 | 0.9314 | 95.2% | 73.4% |
-| Extra Trees | 0.9119 | 0.9162 | 94.7% | 71.7% |
-| Logistic Regression | 0.8968 | 0.9013 | 94.4% | 69.9% |
-| Dummy prior | 0.5134 | 0.5134 | 100.0% | 51.3% |
-
-<sub>*각 모델의 Validation 비용 최소 임계값을 Test에 고정 적용한 결과입니다.</sub>
-
-최종 모델의 운영 임계값은 `0.30`이며 Test 혼동행렬은 TN 8,435 / FP 3,730 / FN 492 / TP 12,343입니다. 모델 선정 근거, 하이퍼파라미터, 현재 오류 현황은 [모델 학습 결과서](reports/training_report.md)와 [검증 계획서](docs/validation_plan.md)에 정리했습니다. FP·FN 사례 분석은 팀원 협의 후 추가할 예정입니다.
-
-딥러닝은 의도적으로 제외했습니다. 15개 파라미터의 가법 로지스틱 모델이 Test PR-AUC 0.9468로 최종 모델 0.9473과 사실상 동률이고, 합성 생성 규칙의 이론 상한에 이미 근접해 추가 복잡도의 근거가 없기 때문입니다.
-
-## 7. 핵심 인사이트와 유지 활동
-
-- 18개 원천 Feature 중 강한 신호는 7개이며 `weekly_hours`, `subscription_type`, `customer_service_inquiries`의 영향이 가장 큽니다.
-- `payment_plan`은 월납·연납 간 이탈률 차이가 0.001로, 연납 전환을 유지 전략으로 제안할 근거가 없습니다.
-- 상담 경험 개선, 유료 요금제 전환, 일시정지 고객 케어, 높은 스킵률 고객의 추천 개선을 우선 실험 대상으로 제안합니다.
-- Feature Importance는 인과관계가 아닙니다. 유지 활동 효과는 실제 A/B 테스트로 검증해야 합니다.
-
-전체 분석은 [인사이트 보고서](artifacts/eda_insight/INSIGHT_REPORT.md)에서 확인할 수 있습니다.
-
-## 8. 제한사항
-
-1. **규칙 기반 합성 데이터로 판정했습니다.** Test PR-AUC 0.9473은 생성 규칙 복원 성능이며 실제 서비스 일반화 성능이 아닙니다.
-2. 관측 기준일·해지일이 없어 예측 시점과 결과 기간을 검증할 수 없습니다.
-3. `weekly_unique_songs > weekly_songs_played`가 29.6%, `num_shared_playlists > num_playlists_created`가 24.6%입니다. 현행 Pipeline은 이 컬럼들을 입력으로 사용하지만 중요도가 거의 없으므로, 향후 제거 실험과 입력 화면 축소가 필요합니다.
-4. FN:FP `3:1`과 LTV 120,000원은 팀 가정입니다. 실제 사업 단가로 다시 승인·산정해야 합니다.
-5. 모델 관계는 연관성만 보여주며 캠페인 효과를 보장하지 않습니다.
-
-## 9. 제출 산출물
-
-| 공지 필수 산출물 | 저장소 파일 |
-|---|---|
-| 데이터 전처리 결과서 | [reports/preprocessing_report.md](reports/preprocessing_report.md) |
-| 인공지능 모델 학습 결과서 | [reports/training_report.md](reports/training_report.md) |
-| 학습된 최종 모델 | `artifacts/model/music_churn_pipeline.joblib` |
-| 모델 보조 파일 | [artifacts/model/metadata.json](artifacts/model/metadata.json), [artifacts/model_comparison.csv](artifacts/model_comparison.csv) |
-| Streamlit 시연 | `app/streamlit_app.py` |
-| 요구사항·데이터·검증 문서 | [docs/README.md](docs/README.md) |
-| 제출 전 점검표 | [docs/submission_checklist.md](docs/submission_checklist.md) |
-
-Google Drive 제출용 PDF와 프로젝트 폴더 ZIP은 저장소 밖에서 별도로 생성합니다. 저장소에는 원본 Markdown과 재현 코드·이미지·모델을 보관합니다.
-
-## 10. 재현 및 협업
-
-```bash
-python -m src.run_pipeline
-python scripts/eda_insight.py
-python scripts/business_levers.py
-```
-
-- [협업 규칙](CONTRIBUTING.md)
-- [Git·GitHub 설정 가이드](docs/GIT_SETUP.md)
-
-`main`에 직접 push하지 않고 기능 브랜치에서 작업한 뒤 Pull Request로 병합합니다.
+원본 `data/*.csv`는 수정하지 않습니다. GitHub에는 자동 Push하지 않으며 현재 작업은 로컬 브랜치에서 관리합니다.

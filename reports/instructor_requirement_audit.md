@@ -1,5 +1,7 @@
 # Instructor Requirement Audit
 
+> **과거 P0 감사 기록:** 현재 최종 감사 결과는 `instructor_requirement_audit_v2.md`를 사용합니다. 아래 LightGBM 결론은 최종 선정 이전 기록입니다.
+
 ## Audit scope
 
 This audit inspected the saved candidate metadata, P0 comparison, final evidence pack, every run CSV, manifest, Project Register, and the non-training artifact-contract test. No model fitting or threshold reselection was performed.

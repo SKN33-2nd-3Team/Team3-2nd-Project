@@ -1,8 +1,8 @@
 {
   "model": "catboost",
   "run_id": "20260721_full_fair_v1",
-  "status": "LOCAL_APP_PROMOTED_FROM_COMPLETED_FULL_FAIR_RUN",
-  "selection_rule": "Highest fine-tuned 5-fold CV PR-AUC among top three; confirmed with OOF, five-seed, bootstrap, calibration, and operating tables.",
+  "status": "LOCAL_APP_PROMOTED_AWAITING_BUSINESS_THRESHOLD_DECISION",
+  "selection_rule": "상위 3개 모델 중 Fine-tuned 5-Fold CV PR-AUC가 가장 높고 OOF·5개 Seed·Bootstrap 근거가 안정적이어서 선정했습니다.",
   "selection_metric": "fine_tuned_cv_pr_auc",
   "selection_evidence": {
     "fine_tuned_cv_pr_auc": 0.9479127420954035,
@@ -11,14 +11,17 @@
     "oof_roc_auc": 0.9419585884019898
   },
   "evaluation_scope": "five_fold_oof",
-  "evaluation_limit": "No untouched external or final holdout was available for the full comparison run.",
+  "evaluation_limit": "독립된 외부 라벨 Holdout이 없어 모든 운영 지표는 5-Fold OOF 근거입니다.",
   "reload_verified": true,
+  "fresh_process_reload_verified": true,
+  "artifact_sha256": "fc35ca91e9242dbc0e914db9f0dfc9e994024a5d4cc8d0d770d12321989a7d0e",
+  "trusted_source_note": "저장소 내부 후보 경로와 메타데이터 SHA-256을 검증한 뒤 로드합니다.",
   "app_default_scenario_id": "balanced_f1",
   "operating_scenarios": [
     {
       "scenario_id": "recall_first",
-      "scenario_label": "Recall-first",
-      "selection_rule": "Maximize recall; accepts a larger contact list.",
+      "scenario_label": "재현율 우선",
+      "selection_rule": "더 많은 고객을 검토해 이탈 고객 누락을 줄입니다.",
       "threshold": 0.29,
       "oof_target_customers": 77700,
       "oof_target_rate": 0.6216,
@@ -30,12 +33,12 @@
       "oof_recall": 0.9518340761055879,
       "oof_f1": 0.8610880076687765,
       "evaluation_split": "five_fold_oof",
-      "evaluation_note": "Saved five-fold out-of-fold predictions; not an untouched external holdout."
+      "evaluation_note": "저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다."
     },
     {
       "scenario_id": "balanced_f1",
-      "scenario_label": "Balanced F1",
-      "selection_rule": "Maximize OOF F1; default decision-support scenario.",
+      "scenario_label": "균형형 F1",
+      "selection_rule": "OOF F1이 가장 높은 기본 의사결정 시나리오입니다.",
       "threshold": 0.3499999999999999,
       "oof_target_customers": 76143,
       "oof_target_rate": 0.609144,
@@ -47,12 +50,12 @@
       "oof_recall": 0.9443855767133107,
       "oof_f1": 0.8638297569075736,
       "evaluation_split": "five_fold_oof",
-      "evaluation_note": "Saved five-fold out-of-fold predictions; not an untouched external holdout."
+      "evaluation_note": "저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다."
     },
     {
       "scenario_id": "precision_first",
-      "scenario_label": "Precision-first",
-      "selection_rule": "Prioritize precision; contacts fewer customers.",
+      "scenario_label": "정밀도 우선",
+      "selection_rule": "검토 고객 수를 줄이고 대상 적중률을 우선합니다.",
       "threshold": 0.74,
       "oof_target_customers": 48463,
       "oof_target_rate": 0.387704,
@@ -64,7 +67,7 @@
       "oof_recall": 0.7179698943497367,
       "oof_f1": 0.8181148290526203,
       "evaluation_split": "five_fold_oof",
-      "evaluation_note": "Saved five-fold out-of-fold predictions; not an untouched external holdout."
+      "evaluation_note": "저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다."
     }
   ],
   "metrics": {
@@ -104,10 +107,10 @@
   "target": {
     "column": "churned",
     "positive_label": 1,
-    "note": "Observed label only; prediction horizon was not supplied."
+    "note": "제공된 관측 라벨이며 예측 기간은 정의되지 않았습니다."
   },
   "feature_variant": "log_numeric",
-  "promoted_at_utc": "2026-07-21T18:15:25.990782+00:00",
-  "source_candidate": "models\\candidates\\20260721_full_fair_v1\\candidate_pipeline.joblib",
-  "archive_path": "artifacts\\model\\archive\\20260722_pre_full_fair_catboost"
+  "promoted_at_utc": "2026-07-21T18:33:37.439443+00:00",
+  "source_candidate": "models/candidates/20260721_full_fair_v1/candidate_pipeline.joblib",
+  "archive_path": "artifacts/model/archive/20260721T182553341963Z_catboost_before_catboost_fc35ca91"
 }
