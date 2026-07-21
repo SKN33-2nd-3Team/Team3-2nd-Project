@@ -1,0 +1,41 @@
+name: 버그 신고
+description: 재현 가능한 오류를 기록합니다.
+title: "[Bug] "
+labels: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 문제 요약
+      description: 기대한 동작과 실제 동작을 작성해주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 방법
+      value: |
+        1. 재현 단계 1
+        2. 재현 단계 2
+        3. 재현 단계 3
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 오류 메시지·로그
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: 실행 환경
+      value: |
+        - OS:
+        - Python:
+        - 브랜치 또는 Commit:
+        - 실행 명령:
+  - type: textarea
+    id: impact
+    attributes:
+      label: 영향 범위
+      description: 학습, 추론, Streamlit, 문서 중 어떤 부분이 막히는지 작성해주세요.

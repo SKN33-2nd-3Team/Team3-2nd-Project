@@ -1,0 +1,43 @@
+name: 작업 요청
+description: 기능, 분석, 문서 작업을 정의합니다.
+title: "[Task] "
+labels: []
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 목적
+      description: 이 작업이 필요한 이유와 기대 결과를 작성해주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 작업 내용
+      description: 체크리스트 형식으로 작성해주세요.
+      value: |
+        - [ ] 작업 항목 1
+        - [ ] 작업 항목 2
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: 완료 조건
+      value: |
+        - [ ] 결과물이 저장소에 반영되어 있다.
+        - [ ] 실행 또는 재현 방법이 기록되어 있다.
+        - [ ] 관련 검증을 통과했다.
+        - [ ] 비밀정보와 데이터 누수 가능성을 확인했다.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: 예상 산출물
+      description: 변경 예정 파일, 보고서 또는 화면을 작성해주세요.
+  - type: textarea
+    id: references
+    attributes:
+      label: 참고 자료
+      description: 선행 Issue, 데이터 출처 또는 관련 문서를 작성해주세요.

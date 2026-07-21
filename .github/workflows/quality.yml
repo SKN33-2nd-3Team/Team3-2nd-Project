@@ -1,0 +1,40 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: |
+          python -m py_compile src/features.py
+          python -m py_compile src/run_pipeline.py
+          python -m py_compile app/streamlit_app.py
+
+      - name: Import core modules
+        run: |
+          python -c "from src.features import MusicFeatureEngineer"
+          python -c "import src.run_pipeline"
