@@ -201,7 +201,9 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
 def eda_page(train: pd.DataFrame):
     header("Data Explorer", "각 입력 변수와 churned 라벨의 관계를 분포·이탈률·표본 수로 확인합니다.")
     feature_options = [c for c in train.columns if c not in ["customer_id", "churned"]]
-    selected = st.selectbox("분석할 컬럼", feature_options, index=feature_options.index("payment_plan"))
+    # Open on the strongest signal; payment_plan is now the weakest (spread 0.001).
+    default_column = "weekly_hours" if "weekly_hours" in feature_options else feature_options[0]
+    selected = st.selectbox("분석할 컬럼", feature_options, index=feature_options.index(default_column))
     st.markdown('<div class="small-caption">모든 컬럼을 선택해 개별 target 관계를 확인할 수 있습니다. 그래프는 연관관계이며 인과관계가 아닙니다.</div>', unsafe_allow_html=True)
     left, right = st.columns([1.45, 1])
     with left:
