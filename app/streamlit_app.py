@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -19,12 +20,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.retention_strategy import (  # noqa: E402
-    build_strategy_queue,
-    derive_strategy_thresholds,
-    plan_economic_assumptions,
-    recommend_retention_strategy,
-)
+from src import retention_strategy as _retention_strategy  # noqa: E402
+
+# Streamlit reruns this file inside a long-lived Python process. When a helper
+# module gains a new public function, that process can still hold the older
+# module object even though the source file is current. Reload only for this
+# stale-module condition so hot-reload recovers without a manual server restart.
+if not hasattr(_retention_strategy, "plan_economic_assumptions"):
+    _retention_strategy = importlib.reload(_retention_strategy)
+
+build_strategy_queue = _retention_strategy.build_strategy_queue
+derive_strategy_thresholds = _retention_strategy.derive_strategy_thresholds
+plan_economic_assumptions = _retention_strategy.plan_economic_assumptions
+recommend_retention_strategy = _retention_strategy.recommend_retention_strategy
 
 DATA_DIR = ROOT / "data"
 ARTIFACT_DIR = ROOT / "artifacts"
