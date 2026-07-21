@@ -12,5 +12,129 @@
     "train": 0.6,
     "validation": 0.2,
     "test": 0.2
+  },
+  "trained_at_utc": "2026-07-21T08:47:51.607258+00:00",
+  "target": {
+    "column": "churned",
+    "positive_label": 1,
+    "meaning": {
+      "0": "유지 (active)",
+      "1": "이탈 (churned)"
+    },
+    "note": "데이터셋이 제공한 라벨. 예측 시점·관찰기간·결과기간이 명시되지 않아 '향후 30일 내 해지'로 해석하지 않는다."
+  },
+  "input_columns": [
+    "customer_id",
+    "age",
+    "location",
+    "subscription_type",
+    "payment_plan",
+    "num_subscription_pauses",
+    "payment_method",
+    "customer_service_inquiries",
+    "signup_date",
+    "weekly_hours",
+    "average_session_length",
+    "song_skip_rate",
+    "weekly_songs_played",
+    "weekly_unique_songs",
+    "num_favorite_artists",
+    "num_platform_friends",
+    "num_playlists_created",
+    "num_shared_playlists",
+    "notifications_clicked"
+  ],
+  "model_feature_names": [
+    "age",
+    "num_subscription_pauses",
+    "weekly_hours",
+    "average_session_length",
+    "song_skip_rate",
+    "weekly_songs_played",
+    "weekly_unique_songs",
+    "num_favorite_artists",
+    "num_platform_friends",
+    "num_playlists_created",
+    "num_shared_playlists",
+    "notifications_clicked",
+    "signup_days_ago",
+    "unique_song_ratio",
+    "shared_playlist_ratio",
+    "hours_per_song",
+    "friends_per_playlist",
+    "location_Alabama",
+    "location_California",
+    "location_Florida",
+    "location_Georgia",
+    "location_Idaho",
+    "location_Maine",
+    "location_Montana",
+    "location_Nebrasksa",
+    "location_New Jersey",
+    "location_New York",
+    "location_North Carolina",
+    "location_North Dakota",
+    "location_South Carolina",
+    "location_Utah",
+    "location_Vermont",
+    "location_Virginia",
+    "location_Washington",
+    "location_West Virginia",
+    "location_Wisconsin",
+    "subscription_type_Family",
+    "subscription_type_Free",
+    "subscription_type_Premium",
+    "subscription_type_Student",
+    "payment_plan_Monthly",
+    "payment_plan_Yearly",
+    "payment_method_Apple Pay",
+    "payment_method_Credit Card",
+    "payment_method_Debit Card",
+    "payment_method_Paypal",
+    "customer_service_inquiries_High",
+    "customer_service_inquiries_Low",
+    "customer_service_inquiries_Medium"
+  ],
+  "metrics": {
+    "validation": {
+      "pr_auc": 0.944602815696156,
+      "roc_auc": 0.9390857273327995,
+      "brier": 0.10317986936398205,
+      "recall_at_operating": 0.9621347876899105,
+      "precision_at_operating": 0.7662095923558975
+    },
+    "test": {
+      "pr_auc": 0.947287056468388,
+      "roc_auc": 0.9415870759013955,
+      "recall_at_operating": 0.9616673159329957,
+      "precision_at_operating": 0.7679338020282461,
+      "f1_at_operating": 0.8539504635395047,
+      "confusion_matrix": {
+        "tn": 8435,
+        "fp": 3730,
+        "fn": 492,
+        "tp": 12343
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.1",
+    "pandas": "3.0.3",
+    "scikit-learn": "1.9.0",
+    "joblib": "1.5.3"
+  },
+  "source_files": {
+    "train": {
+      "path": "data/train.csv",
+      "rows": 125000,
+      "sha256": "e967211a589021bda2e024c28f31ca84662f53f8c0f2985b565f336bb040b9b5"
+    },
+    "test": {
+      "path": "data/test.csv",
+      "rows": 75000,
+      "sha256": "b9081ab39f51a65eb39240e9d8c2dc90011efdb554d8b62896d4fa021252a71f"
+    }
   }
 }

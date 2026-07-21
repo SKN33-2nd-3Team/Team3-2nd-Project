@@ -71,6 +71,20 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=json_safe), encoding="utf-8")
 
 
+def environment_versions() -> dict:
+    """Record the versions needed to reload the saved Pipeline reliably."""
+    import sklearn
+
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "scikit-learn": sklearn.__version__,
+        "joblib": joblib.__version__,
+    }
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -392,17 +406,49 @@ def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
 
     recommended_name = str(comparison.iloc[0]["model"])
     recommended_pipe = fitted[recommended_name]
+    best_row = comparison.iloc[0]
     recommended_info = {
         "model": recommended_name,
         "selection_rule": f"lowest Validation expected cost with FN:FP={FN_COST:g}:1, then PR-AUC, then Recall; provisional and awaiting user approval",
         "false_negative_cost": FN_COST,
         "false_positive_cost": FP_COST,
-        "validation_threshold": float(comparison.iloc[0]["validation_operating_threshold"]),
+        "validation_threshold": float(best_row["validation_operating_threshold"]),
         "train_rows": int(len(X_train)),
         "validation_rows": int(len(X_val)),
         "test_rows": int(len(X_test)),
         "random_state": RANDOM_STATE,
         "split": {"train": 0.6, "validation": 0.2, "test": 0.2},
+        # Guide section 8 requires the saved model to carry its own provenance.
+        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "target": {
+            "column": "churned",
+            "positive_label": 1,
+            "meaning": {"0": "유지 (active)", "1": "이탈 (churned)"},
+            "note": "데이터셋이 제공한 라벨. 예측 시점·관찰기간·결과기간이 명시되지 않아 '향후 30일 내 해지'로 해석하지 않는다.",
+        },
+        "input_columns": [c for c in X.columns],
+        "model_feature_names": [str(c) for c in recommended_pipe.named_steps["preprocess"].get_feature_names_out()],
+        "metrics": {
+            "validation": {
+                "pr_auc": float(best_row["validation_pr_auc"]),
+                "roc_auc": float(best_row["validation_roc_auc"]),
+                "brier": float(best_row["validation_brier"]),
+                "recall_at_operating": float(best_row["validation_operating_recall"]),
+                "precision_at_operating": float(best_row["validation_operating_precision"]),
+            },
+            "test": {
+                "pr_auc": float(best_row["test_pr_auc"]),
+                "roc_auc": float(best_row["test_roc_auc"]),
+                "recall_at_operating": float(best_row["test_operating_recall"]),
+                "precision_at_operating": float(best_row["test_operating_precision"]),
+                "f1_at_operating": float(best_row["test_operating_f1"]),
+                "confusion_matrix": {
+                    "tn": int(best_row["test_tn"]), "fp": int(best_row["test_fp"]),
+                    "fn": int(best_row["test_fn"]), "tp": int(best_row["test_tp"]),
+                },
+            },
+        },
+        "environment": environment_versions(),
     }
     joblib.dump(recommended_pipe, MODEL_DIR / "music_churn_pipeline.joblib")
     write_json(MODEL_DIR / "metadata.json", recommended_info)
@@ -505,12 +551,17 @@ def main() -> None:
     write_model_report(comparison, recommended_info, train, test)
     write_test_predictions(train, test, recommended_info, run_context["pipeline"])
 
+    source_files = {
+        "train": {"path": "data/train.csv", "rows": int(len(train)), "sha256": file_sha256(DATA_DIR / "train.csv")},
+        "test": {"path": "data/test.csv", "rows": int(len(test)), "sha256": file_sha256(DATA_DIR / "test.csv")},
+    }
+    # The saved model must state which data version produced it.
+    recommended_info["source_files"] = source_files
+    write_json(MODEL_DIR / "metadata.json", recommended_info)
+
     metadata = {
         **recommended_info,
-        "source_files": {
-            "train": {"path": "data/train.csv", "sha256": file_sha256(DATA_DIR / "train.csv")},
-            "test": {"path": "data/test.csv", "sha256": file_sha256(DATA_DIR / "test.csv")},
-        },
+        "source_files": source_files,
         "eda": eda_summary,
         "artifacts": [
             "artifacts/eda_summary.json",

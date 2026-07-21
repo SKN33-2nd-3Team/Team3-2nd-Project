@@ -1,0 +1,175 @@
+{
+  "train_shape": [
+    125000,
+    20
+  ],
+  "test_shape": [
+    75000,
+    19
+  ],
+  "missing_values_train": 0,
+  "missing_values_test": 0,
+  "duplicate_rows_train": 0,
+  "duplicate_rows_test": 0,
+  "target_counts": {
+    "0": 60826,
+    "1": 64174
+  },
+  "target_rate": 0.513392,
+  "numeric_correlations": {
+    "weekly_hours": -0.3024638296380896,
+    "notifications_clicked": -0.04241923869040623,
+    "average_session_length": -0.006500312067868068,
+    "num_favorite_artists": -0.0053745865763650735,
+    "num_platform_friends": -0.003002533413227644,
+    "num_playlists_created": -0.002191487573209492,
+    "signup_date": -0.0012027865777562768,
+    "weekly_songs_played": 0.0009075927810730177,
+    "num_shared_playlists": 0.003825970409707856,
+    "weekly_unique_songs": 0.01935653900159304,
+    "age": 0.04870152451500578,
+    "song_skip_rate": 0.16018580001680457,
+    "num_subscription_pauses": 0.18302227906084234
+  },
+  "categorical_churn_rates": {
+    "location": {
+      "Georgia": {
+        "churn_rate": 0.521551081282625,
+        "n": 6705
+      },
+      "Washington": {
+        "churn_rate": 0.5173244953299186,
+        "n": 6638
+      },
+      "Wisconsin": {
+        "churn_rate": 0.5171677094460553,
+        "n": 6553
+      },
+      "New Jersey": {
+        "churn_rate": 0.5168827253542357,
+        "n": 6634
+      },
+      "South Carolina": {
+        "churn_rate": 0.5165289256198347,
+        "n": 6534
+      },
+      "North Dakota": {
+        "churn_rate": 0.5160407480614262,
+        "n": 6577
+      },
+      "Vermont": {
+        "churn_rate": 0.5155781905332535,
+        "n": 6676
+      },
+      "Utah": {
+        "churn_rate": 0.5148243880188536,
+        "n": 6577
+      },
+      "California": {
+        "churn_rate": 0.5138784696174044,
+        "n": 6665
+      },
+      "West Virginia": {
+        "churn_rate": 0.5138760407030527,
+        "n": 6486
+      },
+      "North Carolina": {
+        "churn_rate": 0.5134437186692997,
+        "n": 6583
+      },
+      "Nebrasksa": {
+        "churn_rate": 0.5129525829419785,
+        "n": 6601
+      },
+      "Montana": {
+        "churn_rate": 0.5124199343852524,
+        "n": 6401
+      },
+      "Idaho": {
+        "churn_rate": 0.5112737046438703,
+        "n": 6697
+      },
+      "New York": {
+        "churn_rate": 0.5106480073014907,
+        "n": 6574
+      },
+      "Alabama": {
+        "churn_rate": 0.5104500381388253,
+        "n": 6555
+      },
+      "Florida": {
+        "churn_rate": 0.508179012345679,
+        "n": 6480
+      },
+      "Virginia": {
+        "churn_rate": 0.5057330683381746,
+        "n": 6541
+      },
+      "Maine": {
+        "churn_rate": 0.5052889774643569,
+        "n": 6523
+      }
+    },
+    "subscription_type": {
+      "Free": {
+        "churn_rate": 0.7940772010617545,
+        "n": 31269
+      },
+      "Student": {
+        "churn_rate": 0.5739338763775754,
+        "n": 31305
+      },
+      "Family": {
+        "churn_rate": 0.3458097322348095,
+        "n": 31072
+      },
+      "Premium": {
+        "churn_rate": 0.3390954902085858,
+        "n": 31354
+      }
+    },
+    "payment_plan": {
+      "Monthly": {
+        "churn_rate": 0.5140660464818899,
+        "n": 62562
+      },
+      "Yearly": {
+        "churn_rate": 0.512716614881963,
+        "n": 62438
+      }
+    },
+    "payment_method": {
+      "Apple Pay": {
+        "churn_rate": 0.5189504373177842,
+        "n": 31213
+      },
+      "Debit Card": {
+        "churn_rate": 0.5149878563211044,
+        "n": 31292
+      },
+      "Paypal": {
+        "churn_rate": 0.5115721501182788,
+        "n": 31282
+      },
+      "Credit Card": {
+        "churn_rate": 0.5080575401275109,
+        "n": 31213
+      }
+    },
+    "customer_service_inquiries": {
+      "High": {
+        "churn_rate": 0.7433326118846644,
+        "n": 41583
+      },
+      "Medium": {
+        "churn_rate": 0.5091709994222993,
+        "n": 41544
+      },
+      "Low": {
+        "churn_rate": 0.2892317245002746,
+        "n": 41873
+      }
+    }
+  },
+  "chart_count": 21
+}
