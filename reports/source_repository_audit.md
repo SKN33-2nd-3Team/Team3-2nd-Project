@@ -30,3 +30,24 @@ The current app model can be inspected as an implementation reference, but it is
 ## Next checkpoint
 
 `repository_audit_complete` — run the isolated candidate workflow, preserving the current app and existing model artifacts.
+
+## Final presentation authority update — 2026-07-22
+
+최종 발표 콘텐츠 작성에서는 위 P0 시작 스냅샷을 현재 모델 근거로 재사용하지 않고 다음 순서로 권위 소스를 고정했다.
+
+1. 완료 Run `experiments/submission_full_comparison/20260721_full_fair_v1/run_manifest.json`
+2. 현재 모델 `artifacts/model/metadata.json`
+3. 최종 선정 결정 `reports/final_model_selection_decision.md`
+4. 발표 근거 `reports/presentation_evidence_pack_v3.md`
+5. 원본 수치 `artifacts/presentation_v3/*.csv`
+6. 발표 그래프 `figures/presentation_v3/*.png`
+7. 데이터·검증 경계 `docs/data_card.md`, `docs/validation_plan.md`, `docs/requirements.md`
+
+현재 최종 기술 후보는 CatBoost다. `figures/presentation_v2/`, 이전 bounded/P0 모델 결론, 통합 전 `reports/streamlit_presentation_storyline.md`의 Gradient Boosting·LightGBM·holdout 표현은 최종 발표 근거에서 제외한다. 독립 외부 라벨 Holdout은 없으며, 제공 test 75,000명은 추론에만 사용한다.
+
+이번 조사 결과의 재사용 파일은 다음과 같다.
+
+- `reports/final_presentation_consistency_audit.md`
+- `artifacts/final_presentation_claim_source_map.csv`
+- `artifacts/final_presentation_visual_asset_map.csv`
+- `artifacts/final_presentation_slide_map.csv`
