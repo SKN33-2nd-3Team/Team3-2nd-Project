@@ -107,6 +107,6 @@
 4. Threshold와 Top-K로 모델 점수를 실제 검토 인원과 오류 비용으로 번역한다.
 5. Streamlit에서 근거와 행동 후보를 확인하되 실제 효과는 미래 Holdout과 A/B 테스트로 검증한다.
 
-## 8. 이번 단계의 산출 범위
+## 8. 최종 산출물 검증
 
-첨부 지시서의 우선순위에 따라 이번 단계에서는 PowerPoint 파일을 새로 만들거나 수정하지 않았다. 먼저 발표 콘셉트·스토리라인·슬라이드 내용·대본·Q&A·주장 및 시각자료 맵을 완결했다. 기존 `outputs/PlaylistPro_final_presentation.pptx`는 이번 내용 재구성 이전 버전이므로 신규 발표 근거로 사용하면 안 된다.
+최신 `outputs/PlaylistPro_final_presentation.pptx`는 16장 최종본으로 확정했다. 전 슬라이드 렌더링과 overflow 검사를 통과했으며, 제출 폴더의 PPTX·PDF·발표자 노트도 동일한 최신 서사로 갱신했다. 이전 project-centered·revised·submission-ready 중간 파일은 프로젝트 폴더에서 제거했다.

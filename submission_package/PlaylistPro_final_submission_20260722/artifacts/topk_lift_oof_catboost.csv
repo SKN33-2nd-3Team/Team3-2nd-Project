@@ -1,0 +1,6 @@
+﻿model,top_percent,target_customers,actual_churners_captured,capture_rate,precision,lift,evaluation_split,evaluation_note
+catboost,5,6250,6250,0.0973914669492317,1.0,1.947829338984636,five_fold_oof,OOF 순위 근거이며 캠페인 Uplift나 외부 Holdout 성능이 아닙니다.
+catboost,10,12500,12500,0.1947829338984635,1.0,1.947829338984636,five_fold_oof,OOF 순위 근거이며 캠페인 Uplift나 외부 Holdout 성능이 아닙니다.
+catboost,20,25000,24996,0.3895035372580795,0.99984,1.947517686290398,five_fold_oof,OOF 순위 근거이며 캠페인 Uplift나 외부 Holdout 성능이 아닙니다.
+catboost,30,37500,36457,0.5680961136909028,0.9721866666666666,1.8936537123030095,five_fold_oof,OOF 순위 근거이며 캠페인 Uplift나 외부 Holdout 성능이 아닙니다.
+catboost,40,50000,47158,0.7348458877426995,0.94316,1.837114719356749,five_fold_oof,OOF 순위 근거이며 캠페인 Uplift나 외부 Holdout 성능이 아닙니다.

@@ -1,0 +1,56 @@
+﻿rank,feature,importance
+1,subscription_type_Free,21.06915411666537
+2,customer_service_inquiries_Low,11.094634762329349
+3,log1p_weekly_hours,10.05144816222869
+4,customer_service_inquiries_High,9.812484254206446
+5,age,9.611428626138862
+6,num_subscription_pauses,8.988607856674493
+7,weekly_hours,8.383899782192652
+8,song_skip_rate,7.757273948853567
+9,subscription_type_Student,4.952290897195822
+10,notifications_clicked,2.0771742163215747
+11,customer_service_inquiries_Medium,1.7213696705104689
+12,subscription_type_Premium,0.530427303127952
+13,weekly_unique_songs,0.5181556182624166
+14,log1p_weekly_unique_songs,0.4447310426901436
+15,subscription_type_Family,0.39346059909852055
+16,average_session_length,0.2381322620332915
+17,hours_per_song,0.21437579566168052
+18,signup_days_ago,0.20833740657460745
+19,num_platform_friends,0.1841583579892019
+20,num_favorite_artists,0.17779243143943188
+21,shared_playlist_ratio,0.17461325294059332
+22,log1p_num_platform_friends,0.1631251616442064
+23,unique_song_ratio,0.14680144171073362
+24,log1p_num_playlists_created,0.13772360789929752
+25,friends_per_playlist,0.13231666831889954
+26,num_shared_playlists,0.1268695728419767
+27,num_playlists_created,0.11187136462181324
+28,log1p_weekly_songs_played,0.1058222206452025
+29,weekly_songs_played,0.0949041814630083
+30,log1p_num_shared_playlists,0.09210037475126094
+31,location_Georgia,0.03180046349158493
+32,payment_plan_Monthly,0.03084461335134458
+33,payment_method_Paypal,0.02883896342073515
+34,location_Virginia,0.02883269359749085
+35,payment_method_Debit Card,0.028535727672027632
+36,payment_method_Apple Pay,0.021776820985017292
+37,payment_plan_Yearly,0.017922616207296866
+38,location_Maine,0.014584759725922379
+39,location_North Carolina,0.013168361745047546
+40,payment_method_Credit Card,0.012075745736430608
+41,location_Florida,0.01051539633316324
+42,location_Montana,0.007974419117977326
+43,location_West Virginia,0.007552198453799803
+44,location_Washington,0.006607549966678575
+45,location_California,0.006176240221222899
+46,location_Wisconsin,0.005614600344129927
+47,location_Utah,0.004895168410136681
+48,location_North Dakota,0.003154854236599995
+49,location_South Carolina,0.002128461110376187
+50,location_Idaho,0.0015153888414577426
+51,location_Vermont,0.0
+52,location_Alabama,0.0
+53,location_New Jersey,0.0
+54,location_New York,0.0
+55,location_Nebrasksa,0.0

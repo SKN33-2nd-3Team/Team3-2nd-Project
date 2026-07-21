@@ -1,0 +1,8 @@
+﻿feature,level,churn_rate,n
+subscription_type,Free,0.7940772010617545,31269
+subscription_type,Student,0.5739338763775754,31305
+subscription_type,Family,0.3458097322348095,31072
+subscription_type,Premium,0.3390954902085858,31354
+customer_service_inquiries,High,0.7433326118846644,41583
+customer_service_inquiries,Medium,0.5091709994222993,41544
+customer_service_inquiries,Low,0.2892317245002746,41873

@@ -19,8 +19,8 @@ Audit time: 2026-07-21 (local repository snapshot)
 ## Scope boundary for the bounded modeling run
 
 - The existing Streamlit code and the current operational artifact under `artifacts/model/` are implementation references only; this bounded run must not replace either one.
-- Candidate artifacts will be written under `models/candidates/20260721_submission_bounded_v1/`.
-- Experiment checkpoints, metrics, figures, and a run manifest will be written under `experiments/submission_bounded/20260721_submission_bounded_v1/`.
+- Final candidate artifacts are retained under `models/candidates/20260721_full_fair_v1/` and mirrored in the submission package.
+- The earlier bounded/P0 experiment directory was an intermediate checkpoint and was removed from the cleaned project tree after its evidence was copied into the final package.
 - The supplied data does not document an observation date or outcome horizon. A 30-day prediction interpretation is therefore **UNVERIFIED**.
 
 ## Direct-comparison status

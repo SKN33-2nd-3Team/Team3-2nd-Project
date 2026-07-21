@@ -31,8 +31,8 @@
   "pdf_pages": {
     "preprocessing_report.pdf": 9,
     "training_report.pdf": 11,
-    "PlaylistPro_final_presentation.pdf": 14
+    "PlaylistPro_final_presentation.pdf": 16
   },
-  "presentation_slides": 14,
-  "manifest_files": 190
+  "presentation_slides": 16,
+  "manifest_files": 191
 }

@@ -719,7 +719,7 @@ def write_model_report(
         "",
         "## Interpretation guardrails",
         "",
-        "- Gradient Boosting is the final selected model based on the documented Validation selection rule.",
+        "- This legacy baseline generator is not the final production artifact; the final project Pipeline is the saved CatBoost candidate under artifacts/model/.",
         "- Metrics are for the dataset-provided `churned` label. They do not validate a future 30-day churn horizon.",
         f"- The operating threshold uses the team assumption FN:FP={FN_COST:g}:1; a high Recall operating point can still increase false positives, so campaign capacity and the cost ratio require business review.",
         "- Feature importance and EDA relationships are associations, not causal churn drivers; see `artifacts/feature_importance.csv`.",

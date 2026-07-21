@@ -12,7 +12,7 @@
 - Retraining during final evidence completion: `NO`
 - Existing operational Streamlit model: `CATBOOST ALREADY PROMOTED IN 00c031f`
 - Additional app replacement during this evidence completion: `NOT_PERFORMED`
-- GitHub push: `NOT_PERFORMED`
+- GitHub push: final-cleanup branch pending this task
 
 ## Selection summary
 
@@ -29,6 +29,6 @@
 - Feature importance and churn-rate differences are associations, not causal effects.
 - Operating threshold, campaign action, candidate promotion, legal/data-rights approval, and production deployment remain user or organization decisions.
 
-## Preserved reference run
+## Cleanup status
 
-The earlier bounded P0 run remains available at `experiments/submission_bounded/20260721_submission_bounded_v1/` and was not used to select the full-fair candidate.
+The earlier bounded P0 run, presentation-v2 assets, raw OOF arrays, and search-only model files were removed from the project tree on the cleanup branch. The final submission package and the full-fair run manifest remain.

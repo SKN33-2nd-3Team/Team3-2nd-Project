@@ -1,0 +1,7 @@
+﻿variant,feature_change,prediction_time_available,leakage_risk,logistic_pr_auc,decision,reason
+raw,raw,True,none; deterministic raw inputs only,0.8994953204380532,exclude,lower logistic OOF PR-AUC
+plus1_ratios,plus1_ratios,True,none; deterministic raw inputs only,0.8994861797498581,exclude,lower logistic OOF PR-AUC
+zero_aware_ratios,zero_aware_ratios,True,none; deterministic raw inputs only,0.8994854103257336,exclude,lower logistic OOF PR-AUC
+log_numeric,log_numeric,True,none; deterministic raw inputs only,0.90629296763997,provisional_adopt,highest logistic OOF PR-AUC
+interaction,interaction,True,none; deterministic raw inputs only,0.8996374158175489,exclude,lower logistic OOF PR-AUC
+signal_pruned,signal_pruned,True,none; deterministic raw inputs only,0.8994934319009181,exclude,lower logistic OOF PR-AUC

@@ -24,7 +24,7 @@
 - OOF Top-K/Lift: `artifacts/topk_lift_oof_catboost.csv`
 - OOF 위험 Decile: `artifacts/risk_decile_oof_catboost.csv`
 
-기존 Gradient Boosting 모델과 이전 CatBoost 통합본은 `artifacts/model/archive/` 아래에 서로 다른 폴더로 보존했습니다.
+기존 Gradient Boosting 모델과 이전 통합용 중간 백업은 최종 정리 브랜치에서 프로젝트 폴더 밖의 복구용 아카이브로 이동했습니다. 현재 프로젝트 폴더에는 최종 CatBoost Pipeline만 남아 있습니다.
 
 ## 인사이트 통합
 

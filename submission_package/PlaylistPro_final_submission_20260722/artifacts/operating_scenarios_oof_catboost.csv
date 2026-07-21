@@ -1,0 +1,4 @@
+﻿scenario_id,scenario_label,selection_rule,threshold,oof_target_customers,oof_target_rate,oof_tp,oof_fn,oof_fp,oof_tn,oof_precision,oof_recall,oof_f1,evaluation_split,evaluation_note
+recall_first,재현율 우선,더 많은 고객을 검토해 이탈 고객 누락을 줄입니다.,0.29,77700,0.6216,61083,3091,16617,44209,0.7861389961389962,0.9518340761055879,0.8610880076687765,five_fold_oof,저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다.
+balanced_f1,균형형 F1,OOF F1이 가장 높은 기본 의사결정 시나리오입니다.,0.3499999999999999,76143,0.609144,60605,3569,15538,45288,0.7959365929895066,0.9443855767133107,0.8638297569075736,five_fold_oof,저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다.
+precision_first,정밀도 우선,검토 고객 수를 줄이고 대상 적중률을 우선합니다.,0.74,48463,0.387704,46075,18099,2388,58438,0.9507252955863236,0.7179698943497367,0.8181148290526203,five_fold_oof,저장된 5-Fold OOF 예측 근거이며 외부 Holdout 성능이 아닙니다.

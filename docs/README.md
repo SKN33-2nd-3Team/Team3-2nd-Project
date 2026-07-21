@@ -12,4 +12,4 @@
 | [../reports/preprocessing_report.md](../reports/preprocessing_report.md) | 데이터 전처리 결과서 | 품질 점검, EDA, 전처리, Feature, 한계 |
 | [../reports/training_report.md](../reports/training_report.md) | 인공지능 모델 학습 결과서 | 후보 모델, 비교표, 최종 Test, 오류 현황, 모델 저장 |
 
-문서 수치의 기준 파일은 `artifacts/model/metadata.json`, `artifacts/model_comparison.csv`, `artifacts/run_metadata.json`입니다.
+문서 수치의 기준 파일은 `artifacts/model/metadata.json`, `artifacts/model_comparison_fair.csv`, `artifacts/operating_scenarios_oof_catboost.csv`, `artifacts/run_metadata.json`입니다.

@@ -31,3 +31,6 @@ htmlcov/
 # Local logs and temporary files.
 *.log
 *.tmp
+
+# Local submission archive; the unpacked final package is the reviewable source.
+/submission_package/*.zip

@@ -7,7 +7,7 @@
 1. **Project Summary**
    - Say: “This project ranks customers for review against the dataset's `churned` label. The supplied files do not verify a 30-day horizon.”
    - Open **Model state and candidate evidence**.
-   - Say: “Gradient Boosting powers the live demo scorer; LightGBM is a separately saved candidate awaiting review.”
+   - Say: “CatBoost powers the live demo scorer through the saved final pipeline; the score is a review aid, not an automatic campaign decision.”
 
 2. **Customer Insights**
    - Point to the four spread cards.
@@ -17,7 +17,7 @@
 3. **Improvement Journey**
    - Say: “We keep the raw logistic baseline visible, show the metric movement after changes, and retain at least one excluded experiment.”
    - Point to the saved-candidate table.
-   - Say: “The broader fair-comparison run is still incomplete, so we do not present it as final evidence.”
+   - Say: “The broader fair-comparison run is complete under the same OOF conditions; CatBoost is a conditional final candidate because the top scores are close.”
 
 4. **Model & Operations**
    - Select each operating scenario in the sidebar.
@@ -35,13 +35,13 @@
 | Question | Answer | Evidence |
 | --- | --- | --- |
 | Why not call a feature a churn cause? | The data shows association, not an intervention or randomized experiment. | Customer Insights wording; feature-importance limitation. |
-| Why not deploy LightGBM now? | Its isolated validation artifact is saved and reload-checked, but it is explicitly awaiting review and the wider fair comparison is incomplete. | Candidate metadata; full-run manifest. |
-| Which threshold is best? | There is no universal best threshold without capacity and FN/FP cost. The page shows consequences of three saved scenarios. | `artifacts/operating_scenarios.csv`. |
+| Why not deploy LightGBM now? | LightGBM is competitive, but CatBoost has a small OOF PR-AUC and seed-stability edge; overlapping uncertainty means this is a conditional technical choice, not an absolute win. | Candidate metadata; full-run manifest. |
+| Which threshold is best? | There is no universal best threshold without capacity and FN/FP cost. The page shows consequences of three saved OOF scenarios. | `artifacts/operating_scenarios_oof_catboost.csv`. |
 | Does a high score prove a campaign will retain the customer? | No. Uplift and ROI require a controlled campaign experiment and future outcomes. | Dashboard limitation text. |
 | Why use label-free test data in the batch view? | It supports ranking and operational review only; it cannot measure performance without labels. | `data/test.csv` schema and batch-view warning. |
 
 ## Demo recovery
 
 - If an evidence CSV is unavailable, show the dashboard warning rather than entering a manual metric.
-- If a page fails to load, return to **Project Summary** and use the saved presentation figures under `figures/presentation_v2/`.
+- If a page fails to load, return to **Project Summary** and use the saved presentation figures under `figures/presentation_v3/`.
 - Do not rerun training during a presentation. The app loads saved artifacts only.
