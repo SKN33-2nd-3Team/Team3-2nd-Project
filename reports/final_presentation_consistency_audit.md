@@ -1,108 +1,112 @@
-# PlaylistPro 최종 발표 일관성·모순 감사
+# PlaylistPro 최종 발표 일관성·요구사항 감사
 
-## 감사 기준
+## 1. 감사 결론
 
-- 최종 권위 Run: `20260721_full_fair_v1`
-- 최종 모델 메타데이터: `artifacts/model/metadata.json`
-- 최종 발표 수치: `artifacts/presentation_v3/*.csv`
-- 발표 그래프: `figures/presentation_v3/*.png`
-- 데이터·검증 경계: `docs/data_card.md`, `docs/validation_plan.md`, `docs/requirements.md`
+최종 발표 내용은 **프로젝트 요구사항, 고객 인사이트, 강사 모델링 요구사항을 하나의 14장 본편 흐름에 통합**했다. 모델링 과정은 별도 부록으로 숨기지 않고 Slide 6~9에 배치하되, 프로젝트의 주인공은 고객 유지 의사결정으로 유지했다.
 
-## 발견하고 수정한 모순
+- 프로젝트 중심성: 충족
+- 인사이트에서 행동으로의 연결: 충족
+- Baseline부터 최종 후보까지 모델 개선 추적: 충족
+- 채택·제외 실험과 동일 조건 8모델 비교: 충족
+- Recall·FN·Precision·FP·Threshold·Top-K·Lift 반영: 충족
+- 최종 CatBoost 선정과 LightGBM Trade-off 설명: 충족
+- 데이터·일반화·인과·효과 검증 한계 공개: 충족
+- 발표 연습용 30~60초 대본과 예상 Q&A: 충족
 
-| ID | 발견된 모순 또는 위험 | 권위 근거 | 최종 처리 | 상태 |
-| --- | --- | --- | --- | --- |
-| A01 | 과거 자료는 LightGBM 또는 Gradient Boosting을 최종 모델처럼 표현 | 최신 Run과 모델 Metadata는 CatBoost | 본문 전체를 CatBoost 최종 기술 후보로 통일. LightGBM은 Recall·Calibration Trade-off 비교 후보로만 사용 | 수정 완료 |
-| A02 | PR-AUC를 “양성 클래스가 적어서” 사용한다는 설명 | 이탈 비율 51.34% | 관심 클래스 순위 품질과 Precision–Recall Trade-off를 보기 위한 지표로 수정 | 수정 완료 |
-| A03 | 내부 holdout 또는 외부 일반화 검증이 완료된 것처럼 읽히는 표현 | `external_labeled_holdout=NOT_AVAILABLE` | 모든 성능·Threshold·Top-K를 5-Fold OOF로 표기하고 외부 Holdout 없음 명시 | 수정 완료 |
-| A04 | “향후 30일 이탈” 같은 시간 지평 | 관측 기준일·해지일 없음 | 스냅샷 고객 프로필로 제공된 `churned` 라벨 판별로 통일 | 수정 완료 |
-| A05 | 로그 변환이 최종 CatBoost 성능을 크게 높였다는 서사 | Logistic +0.006798, CatBoost Raw 대비 약 +0.000089 | Logistic 1차 개선과 CatBoost 소폭 확인을 분리. 전체 성능 상승의 주원인은 모델 전환으로 설명 | 수정 완료 |
-| A06 | Random search 최고 OOF를 최종 후보로 다시 선택한 것처럼 보임 | 최종 선정 지표는 Fine-tuned CV PR-AUC | 단일 OOF 최고값보다 Fine CV·Seed·Bootstrap 선정 절차를 따랐다고 명시 | 수정 완료 |
-| A07 | CatBoost가 모든 지표에서 압도적 1위라는 표현 | Bootstrap 구간 중첩, LightGBM Recall·Brier 우위 | CatBoost는 근소한 순위 품질·Seed 안정성 기준의 기술 후보로 제한 | 수정 완료 |
-| A08 | 0.35를 최종 운영 Threshold로 단정 | Metadata 상태는 사업 Threshold 결정 대기 | 0.29·0.35·0.74 복수 시나리오와 사용자 결정으로 표현 | 수정 완료 |
-| A09 | Lift를 실제 유지 효과로 해석 | Lift는 OOF 라벨 집중도 | 무작위 선정 대비 관측 이탈 포착 효율로만 표현 | 수정 완료 |
-| A10 | Feature Importance를 이탈 원인으로 해석 | 인과·시간 순서 미검증 | 관측 연관성과 예측 신호로만 표현. 나이·지역은 행동 배정 근거에서 제외 | 수정 완료 |
-| A11 | Streamlit 행동 제안을 모델이 학습한 최적 처방처럼 표현 | 행동은 `retention_strategy.py`의 투명 규칙 | 예측 모델과 전략 규칙을 분리하고 담당자 검토 필요 명시 | 수정 완료 |
-| A12 | 가정 기반 계획을 실제 LTV·Uplift·ROI로 표현 | 공개 요금·사용자 가정 기반 민감도 분석 | 본문 재무 성과에서 제외하고 Q&A·부록에서 가정임을 설명 | 수정 완료 |
-| A13 | 높은 PR-AUC·Top-K 결과를 실제 서비스 기대치로 해석 | 규칙 기반 합성 데이터 판정 | Slide 3과 12에서 합성성·외부 일반화 부재를 공개 | 수정 완료 |
-| A14 | 구 `streamlit_presentation_storyline.md`가 Gradient Boosting·LightGBM·holdout을 혼합 | 파일 자체가 통합 전 기록으로 표기 | 최종 발표 소스에서 제외 | 제외 |
-| A15 | `figures/presentation_v2/07_lightgbm_selection_evidence.png`가 최신 그래프와 공존 | v3 발표 팩과 Run이 최신 | v2 전체를 본문·부록에서 제외 | 제외 |
-| A16 | `source_repository_audit.md` 본문이 P0 시작 시점 상태를 기록 | 헤더가 현재 CatBoost 상태와 과거 스냅샷을 구분 | 최초 조사 이력으로만 보존하고 최종 수치는 Run manifest·Metadata 사용 | 범위 제한 |
+## 2. 권위 근거 순서
 
-## 데이터와 문제 정의 감사
+서로 다른 과거 기록이 충돌할 경우 다음 순서로 판단했다.
 
-| 점검 항목 | 최종 판정 | 발표 처리 |
-| --- | --- | --- |
-| 분석 단위 | VERIFIED | 고객 1명 = 1행 |
-| Train/Test 규모 | VERIFIED | 125,000 / 75,000 |
-| Target | VERIFIED | `churned`, 0=유지·1=이탈 |
-| 이탈 비율 | VERIFIED | 51.34%, 불균형 주장 금지 |
-| 결측·중복 | VERIFIED | 0건 |
-| Train–Test ID 중첩 | VERIFIED | 0건 |
-| 데이터 합성성 | PARTIALLY_VERIFIED | 공식 명시가 아니라 팀 분석으로 “규칙 기반 합성으로 판정” 표현 |
-| 예측 기간 | UNVERIFIED | “30일 이탈” 제외 |
-| 외부 일반화 | UNVERIFIED | 외부 라벨 Holdout 부재 명시 |
+1. `experiments/submission_full_comparison/20260721_full_fair_v1/run_manifest.json`
+2. `artifacts/model/metadata.json`
+3. 해당 Run의 원본 CSV·OOF·검증 결과
+4. `artifacts/presentation_v3/*.csv`와 `figures/presentation_v3/*.png`
+5. `docs/data_card.md`, `docs/requirements.md`, `reports/source_repository_audit.md`
+6. 과거 v2 발표 문서와 구 Streamlit 스토리라인은 참고 이력으로만 사용
 
-## 모델링 감사
+## 3. 요구사항 반영 감사
 
-| 점검 항목 | 판정 | 근거 |
-| --- | --- | --- |
-| Raw Logistic과 Log Logistic 구분 | 충족 | `preprocessing_experiment_results.csv` |
-| 동일 Feature·동일 Fold 비교 | 충족 | `model_comparison_fair.csv`, `cv_fold_assignments.csv` |
-| 8개 모델 비교 | 충족 | Dummy 포함 8개 |
-| 7개 모델 RandomizedSearch | 충족 | Run manifest Trial 수 기록 |
-| 실제 Top 3 정밀 탐색 | 충족 | CatBoost·XGBoost·LightGBM 각 15회 |
-| Seed 안정성 | 충족 | 5개 Seed |
-| Bootstrap | 충족 | 1,000회, 상위 3개 CI 중첩 |
-| Calibration | 충족 | Brier·평균 절대 보정 오차 저장 |
-| 저장·재로딩 | 충족 | SHA-256·새 프로세스 재로딩 통과 |
-| 외부 라벨 Holdout | 미충족 | NOT_AVAILABLE, 발표 한계로 처리 |
+| 요구 영역 | 본편 위치 | 반영 내용 | 상태 |
+| --- | --- | --- | --- |
+| 프로젝트 주제 | Slide 1~2 | 모든 고객을 관리할 수 없는 상황에서 우선 검토 대상과 행동을 선택 | 충족 |
+| 데이터 이해 | Slide 3 | 12.5만 학습·7.5만 점수 산출·결측/중복·시간 지평·합성성 | 충족 |
+| 고객 인사이트 | Slide 4 | 청취·구독·문의·Skip/Pause 신호와 수치 | 충족 |
+| 추천 행동 | Slide 5 | 신호별 검토 행동과 Age·Location·ID 제외 원칙 | 충족 |
+| 인사이트 기반 전처리 | Slide 6 | Raw 대비 Log 개선·채택·제외 실험·CatBoost 소폭 효과 | 충족 |
+| 공정 검증·누수 방지 | Slide 7 | 동일 피처·고정 5-Fold·Fold 내부 Pipeline·OOF | 충족 |
+| Baseline→최종 과정 | Slide 8 | 직전 대비·누적 변화·실패 실험 | 충족 |
+| 8개 모델 동일 조건 | Slide 9 | 전체 후보 비교와 상위 3개 정밀 검증 | 충족 |
+| 최종 모델 선정 이유 | Slide 9 | CatBoost 순위 품질·Seed 안정성·Bootstrap 중첩·LGB 대안 | 충족 |
+| Threshold 운영 | Slide 10 | 0.29·0.35·0.74별 대상 수와 Recall·Precision·FN·FP | 충족 |
+| Top-K·Lift·Risk Decile | Slide 11 | 인원–Capture–Lift 연결과 uplift 오해 방지 | 충족 |
+| Streamlit 활용 | Slide 12 | 6개 화면과 고객별 근거·행동·가정 기반 계획 | 충족 |
+| 한계·다음 검증 | Slide 13 | 무라벨 Test·시간 Holdout·Calibration·A/B 테스트 | 충족 |
+| 프로젝트 결론 | Slide 14 | 인사이트–모델–운영–행동의 의사결정 구조 | 충족 |
 
-## 인사이트 감사
+## 4. 강사 요구사항 상세 감사
 
-| 요구사항 | 반영 위치 | 판정 |
-| --- | --- | --- |
-| 핵심 고객 행동 인사이트 | Slide 4 | 충족 |
-| 인사이트와 Feature 가설 연결 | Slide 5 | 충족 |
-| 행동 가능한 신호와 진단 신호 구분 | Slide 4·11·A9 | 충족 |
-| 연관성과 인과 구분 | Slide 3·4·12 | 충족 |
-| 실패 Feature 실험 포함 | Slide 5 | 충족 |
-| 실제 대응 행동 제안 | Slide 11 | 부분 충족 — 행동 후보이며 효과 미검증 |
+| 강사 요구사항 | 발표 근거 | 판정 | 발표 방식 |
+| --- | --- | --- | --- |
+| 성능을 높이기 위해 무엇을 시도했는가 | Slide 6·8 | 충족 | 전처리 가설과 모델 전환·제한 탐색을 단계별로 설명 |
+| 조치별 성능 변화가 그래프로 있는가 | Slide 6·8 | 충족 | adopted/rejected와 performance progression 사용 |
+| 모델 선택에 Recall FN PR-AUC 운영 인원을 반영했는가 | Slide 7·9~11 | 충족 | 기술 후보 선정과 운영 기준 결정을 분리 |
+| 최소 Baseline부터 최종 후보까지 변화표 | Slide 8 | 충족 | 0.899495→0.906293→0.947622→0.948004→0.947897 |
+| 실험별 문제 관찰과 가설 | Slide 6·8 | 충족 | 관찰–가설–검증–결정 구조로 설명 |
+| 직전 대비·최초 대비 누적 변화 | Slide 8 | 충족 | 최종 누적 +0.048402와 단계별 수치 사용 |
+| 채택 실험과 제외 실험 | Slide 6·8 | 충족 | 로그 변환 채택·상호작용/비율 제외·GB 하락 제시 |
+| 8개 모델 동일 조건 비교 | Slide 7·9 | 충족 | 고정 Fold와 동일 피처 조건 명시 |
+| 모델별 튜닝 전후 | Slide 8 | 충족 | 본편은 대표 성공·실패를 표시하고 원본 시각은 Q&A 맵에 연결 |
+| 최고 단일 점수와 최종 후보 차이 | Slide 8·9 | 충족 | Search 최고와 Fine OOF를 구분 |
+| Validation·Holdout 일반화 | Slide 3·13 | 충족 | OOF만 존재하고 외부 라벨 Holdout은 없음을 명시 |
+| 발표 그래프와 원본 CSV | 시각자료 맵 | 충족 | 모든 사용 그래프에 원본 CSV 또는 근거 파일 연결 |
 
-## 강사 요구사항 감사
+## 5. 발견하고 제거한 모순
 
-| 강사 요구사항 | 발표 반영 | 판정 |
-| --- | --- | --- |
-| 성능을 높이기 위해 무엇을 시도했는가 | Slide 5~7 | 충족 |
-| 조치별 성능 변화 그래프 | Slide 5~7, `figures/presentation_v3` | 충족 |
-| Recall·FN·PR-AUC·대상 수를 반영한 선정 설명 | Slide 8~10 | 충족 |
-| Baseline부터 최종 후보까지 변화 | Slide 6 | 충족 |
-| 채택·제외 실험 | Slide 5 | 충족 |
-| 8개 모델 동일 조건 비교 | Slide 7 | 충족 |
-| 튜닝 전후 | Slide 7·A2·A3 | 충족 |
-| Threshold 시나리오 | Slide 9 | 충족 |
-| Top-K·Lift·Risk Decile | Slide 10 | 충족 |
-| 최고 단일 점수와 최종 선정 차이 | Slide 7~8·Q3 | 충족 |
-| 일반화 검증 | Slide 12 | 확인 불가를 정직하게 명시 |
-| 발표 그래프와 원본 CSV 연결 | Visual Asset Map | 충족 |
+| ID | 위험한 기존 표현 | 권위 근거 | 최종 처리 |
+| --- | --- | --- | --- |
+| A01 | LightGBM 또는 Gradient Boosting이 최종 모델 | 최신 Metadata는 CatBoost | CatBoost를 조건부 기술 후보로 통일 |
+| A02 | PR-AUC는 심한 불균형 때문에 선택 | 양성 비율 51.34% | 위험 순위 품질과 Precision–Recall 관계 때문으로 수정 |
+| A03 | Test 결과를 Holdout 성능으로 표현 | Test에 라벨 없음 | Test는 점수 산출 대상·성능은 OOF로 구분 |
+| A04 | 향후 30일 이탈 예측 | 시간 기준과 관찰 기간 없음 | 제공된 churned 분류로 한정 |
+| A05 | 로그 변환이 CatBoost 최종 성능을 크게 개선 | CatBoost raw 대비 약 +0.000089 | Logistic 개선과 CatBoost 효과를 분리 |
+| A06 | 탐색 최고 0.948004가 최종 확정 성능 | 최종 Fine OOF 0.947897 | 탐색 최고와 최종 후보 검증을 분리 |
+| A07 | CatBoost가 모든 지표에서 압도적 1위 | Bootstrap 중첩·LGB Recall/Brier 우위 | 조건부 선택과 대안을 함께 제시 |
+| A08 | Threshold 0.35가 확정 운영값 | 사업 비용·역량 미확정 | 0.29·0.35·0.74 복수 시나리오로 제시 |
+| A09 | Lift 1.95가 캠페인 효과 | 라벨 농축도 | 무작위 대비 위험 고객 농축으로 한정 |
+| A10 | Feature importance와 그룹 차이가 원인 | 인과 검증 없음 | 연관 신호와 검토 가설로 제한 |
+| A11 | 앱이 추천 행동을 자동 실행 | 투명 규칙과 사람 검토 구조 | 행동 후보 제시·채택/보류/직접 검토로 표현 |
+| A12 | 계획 가정이 실제 LTV·ROI | 편집 가능한 가정 | 시나리오용 가정임을 화면·대본·Q&A에 명시 |
+| A13 | 높은 내부 성능이 현실 성능을 보장 | 합성성·외부 Holdout 없음 | 실제 Holdout과 A/B 테스트를 다음 단계로 제시 |
 
-## 프로젝트 요구사항 감사
+## 6. 주장–화면–대본 일치 검사
 
-| 프로젝트 요구사항 | 발표 반영 | 판정 |
-| --- | --- | --- |
-| 데이터 구조·Target·누수 방지 | Slide 3·6 | 충족 |
-| EDA와 고객 인사이트 | Slide 4 | 충족 |
-| 인사이트 기반 개선 | Slide 5 | 충족 |
-| 모델 비교·선정 | Slide 7·8 | 충족 |
-| 운영 Threshold·우선순위 | Slide 9·10 | 충족 |
-| 저장 모델 예측과 Streamlit | Slide 11 | 충족 |
-| 고객별 행동 후보 | Slide 11 | 충족, 규칙 기반·담당자 검토 명시 |
-| 실제 캠페인 실행 | 범위 밖 | 앱과 발표에서 실행하지 않음 명시 |
-| 실제 유지 효과 검증 | 미완료 | Slide 12의 A/B 테스트 계획으로 이동 |
+- Slide 수: 콘셉트·스토리라인·본문·대본·슬라이드 맵 모두 14장으로 통일했다.
+- 최종 모델: 모든 신규 발표 문서에서 CatBoost를 ‘조건부 기술 후보’로 표기했다.
+- 최종 PR-AUC: 0.947897로 통일했다.
+- 데이터 범위: Train 125000, Test 75000, Test 라벨 없음으로 통일했다.
+- 핵심 인사이트 수치: 주간 청취 -0.302, Free 79.41%, Premium 33.91%, 문의 High 74.33%, Low 28.92로 통일했다.
+- 운영 수치: Threshold와 Top-K 수치는 원본 CSV에 연결했다.
+- 행동 범위: 자동 접촉·할인 제공·CRM 발송·실제 uplift 검증은 제외했다.
 
-## 최종 판정
+## 7. 발표 품질 판단
 
-- 최신 CatBoost Run과 v3 시각자료 기준으로 본문 12장과 부록 사양이 일관되게 정리됐다.
-- 데이터 합성성·예측 기간·외부 Holdout·Uplift 한계를 초반과 결론에 배치해 과장을 차단했다.
-- 강사 요구사항의 모델링 Journey와 프로젝트 요구사항의 행동 제안이 하나의 의사결정 흐름으로 연결됐다.
-- 남은 작업은 실제 PowerPoint 제작 단계의 화면 배치·폰트·겹침·가독성 렌더링 QA다.
+### 프로젝트와 모델의 비중
+
+- Slide 1~5: 문제·의사결정·데이터·인사이트·행동
+- Slide 6~9: 전처리·검증·개선 과정·모델 선정
+- Slide 10~12: 운영 기준·고객 우선순위·앱 사용
+- Slide 13~14: 한계·다음 검증·결론
+
+모델 관련 슬라이드는 전체의 약 4장으로 제한했고, 앞뒤를 사업 문제와 행동·운영 흐름이 감싸도록 구성했다. 따라서 프로젝트 주제 없이 모델 학습이 주가 되는 기존 문제를 해소했다.
+
+### 발표 가능한 최종 핵심 메시지
+
+1. 모든 고객에게 같은 자원을 쓰지 않고 위험 고객 검토 순서를 만든다.
+2. 낮은 청취·Free·높은 문의·Skip/Pause를 원인이 아닌 행동 검토 신호로 사용한다.
+3. 실패 실험까지 동일 OOF 조건에서 기록해 CatBoost를 조건부 기술 후보로 선택했다.
+4. Threshold와 Top-K로 모델 점수를 실제 검토 인원과 오류 비용으로 번역한다.
+5. Streamlit에서 근거와 행동 후보를 확인하되 실제 효과는 미래 Holdout과 A/B 테스트로 검증한다.
+
+## 8. 이번 단계의 산출 범위
+
+첨부 지시서의 우선순위에 따라 이번 단계에서는 PowerPoint 파일을 새로 만들거나 수정하지 않았다. 먼저 발표 콘셉트·스토리라인·슬라이드 내용·대본·Q&A·주장 및 시각자료 맵을 완결했다. 기존 `outputs/PlaylistPro_final_presentation.pptx`는 이번 내용 재구성 이전 버전이므로 신규 발표 근거로 사용하면 안 된다.
