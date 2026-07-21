@@ -64,5 +64,10 @@ def test_plan_economic_defaults_are_differentiated_and_explained():
     economics = plan_economic_assumptions(["Free", "Student", "Premium", "Family"])
     assert economics["contact_cost"].nunique() == 4
     assert economics["customer_value"].nunique() == 4
-    assert economics.set_index("plan").loc["Premium", "customer_value"] == 120_000
+    by_plan = economics.set_index("plan")
+    assert by_plan.loc["Free", "customer_value"] == 0
+    assert by_plan.loc["Student", "customer_value"] == 72_000
+    assert by_plan.loc["Premium", "customer_value"] == 130_800
+    assert by_plan.loc["Family", "customer_value"] == 196_200
+    assert by_plan.loc["Free", "contact_cost"] < by_plan.loc["Family", "contact_cost"]
     assert economics["basis"].str.len().min() > 0

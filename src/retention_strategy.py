@@ -15,32 +15,33 @@ import pandas as pd
 
 EVIDENCE_LEVEL = "관찰 연관성 기반 가설 · 캠페인 효과 미검증"
 
-# Presentation-planning assumptions, not observed revenue or campaign costs.
-# Premium keeps the existing team assumption of 120,000 KRW as the anchor.
+# Presentation-planning assumptions, not observed PlaylistPro revenue or costs.
+# Revenue proxies use a public Korean music-plan benchmark excluding VAT;
+# variable costs include delivery plus the operating effort implied by the channel.
 PLAN_ECONOMIC_ASSUMPTIONS: dict[str, dict[str, object]] = {
     "Free": {
-        "contact_cost": 1_000,
-        "customer_value": 30_000,
-        "default_channel": "저비용 자동 메시지",
-        "basis": "Premium 가치의 25%를 광고·전환 잠재가치 대용치로 가정",
+        "contact_cost": 100,
+        "customer_value": 0,
+        "default_channel": "앱 푸시·자동 메시지",
+        "basis": "발송·자동화 운영비 100원 가정 · 광고·유료 전환 근거가 없어 구독 매출 대용치는 0원",
     },
     "Student": {
-        "contact_cost": 1_500,
+        "contact_cost": 200,
         "customer_value": 72_000,
         "default_channel": "자동화 혜택 안내",
-        "basis": "Premium 가치의 60%를 학생 할인형 가치로 가정",
+        "basis": "자동 발송·운영비 200원 가정 · 외부 공개 요금 월 6,000원(부가세 제외) × 12개월",
     },
     "Premium": {
-        "contact_cost": 3_000,
-        "customer_value": 120_000,
-        "default_channel": "개인화 디지털 접촉",
-        "basis": "요구사항의 팀 가정 연간 LTV 120,000원을 기준점으로 사용",
+        "contact_cost": 500,
+        "customer_value": 130_800,
+        "default_channel": "개인화 디지털 메시지",
+        "basis": "개인화 발송·운영비 500원 가정 · 외부 공개 요금 월 10,900원(부가세 제외) × 12개월",
     },
     "Family": {
         "contact_cost": 4_500,
-        "customer_value": 180_000,
-        "default_channel": "고관여 상담·혜택 안내",
-        "basis": "Premium 가치의 150%를 다인 계정 가치 대용치로 가정",
+        "customer_value": 196_200,
+        "default_channel": "상담 우선·혜택 안내",
+        "basis": "상담 인력·발송 운영비 4,500원 가정 · 공유형 외부 요금 월 16,350원(부가세 제외) × 12개월 대용",
     },
 }
 
@@ -60,10 +61,10 @@ def plan_economic_assumptions(plans: list[str]) -> pd.DataFrame:
     rows = []
     for plan in plans:
         assumption = PLAN_ECONOMIC_ASSUMPTIONS.get(plan, {
-            "contact_cost": 3_000,
-            "customer_value": 120_000,
+            "contact_cost": 500,
+            "customer_value": 130_800,
             "default_channel": "담당자 지정 필요",
-            "basis": "알 수 없는 유형이므로 Premium 기준값을 임시 적용",
+            "basis": "알 수 없는 유형이므로 Premium 외부 벤치마크를 임시 적용",
         })
         rows.append({"plan": plan, **assumption})
     return pd.DataFrame(rows)

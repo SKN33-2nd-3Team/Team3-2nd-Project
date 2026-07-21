@@ -417,8 +417,9 @@ def improvement_page(tables: dict) -> None:
     with left:
         fig = px.bar(prep, x="실험", y="pr_auc", color="결정", text=prep["pr_auc"].map(lambda x: f"{x:.4f}"),
                      color_discrete_map={"채택": COLORS["orange"], "제외": "#a8b4bf"})
-        fig.update_layout(title="인사이트 기반 전처리 Logistic OOF 비교", yaxis_range=[0.895, 0.91], yaxis_title="PR-AUC", xaxis_title=None)
+        fig.update_layout(title="1차 Feature 가공 검증 · Logistic OOF", yaxis_range=[0.895, 0.91], yaxis_title="PR-AUC", xaxis_title=None)
         st.plotly_chart(plot_style(fig), width="stretch")
+        st.caption("Logistic은 최종 후보가 아니라 변환 효과를 같은 조건에서 빠르게 비교한 고정 검증기입니다. CatBoost 재확인에서도 log_numeric이 가장 높았지만 Raw와 차이는 매우 작았습니다. 공통 Feature 결정 근거이지 전체 성능 향상의 주된 원인으로 과장하지 않습니다.")
     with right:
         card("문제 관찰", "횟수·시간 변수의 긴 꼬리가 선형 기준 모델에서 신호를 압축할 수 있었습니다.", "note-card", "01 OBSERVE")
         st.write("")
@@ -670,7 +671,7 @@ def strategy_review_panel(record: dict, probability: float, tables: dict, scenar
 def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scenario: pd.Series) -> None:
     st.markdown(
         '<div class="info-card"><b>가정 기반 캠페인 계획</b><br>'
-        f'현재 운영 선택은 <b>{html.escape(str(scenario["scenario_label"]))}</b>입니다. 예산·접촉 비용·고객 가치·유지 전환율은 사용자 가정이며, '
+        f'현재 운영 선택은 <b>{html.escape(str(scenario["scenario_label"]))}</b>입니다. 예산·캠페인 변동비·연간 매출 대용치·추가 유지 성공률은 사용자 가정이며, '
         '위험 점수 합계는 확정 이탈자 수가 아닙니다. 실제 Uplift·ROI로 해석하지 마세요.</div>',
         unsafe_allow_html=True,
     )
@@ -692,7 +693,7 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
     input_box = st.container()
     assumption_left, assumption_right = st.columns([1.35, 1])
     with assumption_left:
-        success_rate = st.slider("접촉 후 유지 전환율 가정", 0.0, 0.5, 0.10, 0.01, key="campaign_success_rate")
+        success_rate = st.slider("접촉 고객의 추가 유지 성공률 가정", 0.0, 0.5, 0.10, 0.01, key="campaign_success_rate")
     with assumption_right:
         st.markdown(
             '<div class="note-card"><b>연동 입력</b><br>예산·인원·상위 비율 중 마지막으로 수정한 값을 기준으로 나머지를 자동 환산합니다.</div>',
@@ -708,37 +709,37 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
             "평균 위험 점수": [float(counts.loc[plan, "mean"]) for plan in plan_order],
             "기본 접촉 채널": [str(economic_defaults.loc[plan, "default_channel"]) for plan in plan_order],
             "포함": True,
-            "접촉 비용(원)": [int(economic_defaults.loc[plan, "contact_cost"]) for plan in plan_order],
-            "고객 가치 가정(원)": [int(economic_defaults.loc[plan, "customer_value"]) for plan in plan_order],
+            "1인 캠페인 변동비(원)": [int(economic_defaults.loc[plan, "contact_cost"]) for plan in plan_order],
+            "연간 매출 대용치(원)": [int(economic_defaults.loc[plan, "customer_value"]) for plan in plan_order],
         }),
         hide_index=True,
         disabled=["구독 유형", "보유 고객", "평균 위험 점수", "기본 접촉 채널"],
         column_config={
             "평균 위험 점수": st.column_config.NumberColumn("평균 위험 점수", format="percent"),
             "포함": st.column_config.CheckboxColumn("포함"),
-            "접촉 비용(원)": st.column_config.NumberColumn("접촉 비용(원)", min_value=0, step=500),
-            "고객 가치 가정(원)": st.column_config.NumberColumn("고객 가치 가정(원)", min_value=0, step=10000),
+            "1인 캠페인 변동비(원)": st.column_config.NumberColumn("1인 캠페인 변동비(원)", help="발송료뿐 아니라 해당 채널의 자동화·상담 운영비를 포함한 가정입니다.", min_value=0, step=100),
+            "연간 매출 대용치(원)": st.column_config.NumberColumn("연간 매출 대용치(원)", help="LTV나 기여이익이 아닌 외부 공개 요금 기반 참고값입니다.", min_value=0, step=1000),
         },
         width="stretch",
-        key="campaign_plan_config",
+        key="campaign_plan_config_v2",
     ).set_index("구독 유형")
     with st.expander("구독 유형별 기본 가정의 추론 근거"):
         assumption_view = economic_defaults.reset_index().rename(columns={
-            "plan": "구독 유형", "contact_cost": "기본 접촉 비용", "customer_value": "고객 가치 가정",
+            "plan": "구독 유형", "contact_cost": "1인 캠페인 변동비", "customer_value": "연간 매출 대용치",
             "default_channel": "기본 접촉 채널", "basis": "추론 근거",
         })
         st.dataframe(assumption_view, hide_index=True, width="stretch")
-        st.caption("가격·ARPU 원천 데이터가 없어 Premium 연 120,000원 팀 가정을 기준점으로 상대 추정했습니다. 모든 값은 편집 가능한 계획 가정입니다.")
+        st.caption("PlaylistPro의 가격·마진·채널 원가가 없어 [외부 공개 음악 구독 요금](https://www.spotify.com/kr-ko/premium/)을 부가세 제외 연간 매출로 환산했습니다(2026-07-22 기준). Free는 근거가 없어 0원이며, 모든 값은 편집 가능한 계획 가정입니다. LTV·기여이익이 아닙니다.")
 
     included = [plan for plan in plan_order if bool(config.loc[plan, "포함"])]
     if not included:
         st.warning("계획에 포함할 구독 유형을 하나 이상 선택해 주세요.")
         return
     work = base.loc[base["plan"].isin(included)].copy()
-    work["cost"] = work["plan"].map(config["접촉 비용(원)"].astype(float))
-    work["customer_value"] = work["plan"].map(config["고객 가치 가정(원)"].astype(float))
+    work["cost"] = work["plan"].map(config["1인 캠페인 변동비(원)"].astype(float))
+    work["customer_value"] = work["plan"].map(config["연간 매출 대용치(원)"].astype(float))
     work["assumed_net_value"] = work["probability"] * success_rate * work["customer_value"] - work["cost"]
-    uniform_economics = config.loc[included, "접촉 비용(원)"].nunique() == 1 and config.loc[included, "고객 가치 가정(원)"].nunique() == 1
+    uniform_economics = config.loc[included, "1인 캠페인 변동비(원)"].nunique() == 1 and config.loc[included, "연간 매출 대용치(원)"].nunique() == 1
     sort_columns = ["probability"] if uniform_economics else ["assumed_net_value", "probability"]
     work = work.sort_values(sort_columns, ascending=False).reset_index(drop=True)
     pool = len(work)
@@ -771,13 +772,13 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         b.number_input("연락 인원(명)", min_value=0, max_value=pool, step=50, key="campaign_count", on_change=set_campaign_driver, args=("count",))
         c.number_input("상위 위험군(%)", min_value=0.0, max_value=100.0, step=0.5, key="campaign_percent", on_change=set_campaign_driver, args=("percent",))
 
-    sort_label = "위험 점수 순" if uniform_economics else "사용자 가정 기대 순가치 순"
+    sort_label = "위험 점수 순" if uniform_economics else "사용자 가정 매출효과-비용 순"
     st.caption(f"대상 풀 {pool:,}명 · 현재 정렬 기준: {sort_label} · 제공 test.csv에는 정답 라벨이 없습니다.")
     for column, item in zip(st.columns(4), [
         ("가정 집행액", f"{spend:,.0f}원", f"{selected_count:,}명 검토"),
         ("위험 점수 합계", f"{risk_score_sum:,.0f}", f"평균 {risk_score_sum / selected_count:.1%}" if selected_count else "-"),
-        ("가정 유지 전환", f"{assumed_retained:,.1f}명", f"전환율 가정 {success_rate:.0%}"),
-        ("가정 순편익", f"{assumed_net:,.0f}원", f"가정 ROI {assumed_net / spend:.1%}" if spend else "-"),
+        ("가정 추가 유지", f"{assumed_retained:,.1f}명", f"성공률 가정 {success_rate:.0%}"),
+        ("가정 매출효과-비용", f"{assumed_net:,.0f}원", f"매출효과/비용 {assumed_benefit / spend:.1f}배" if spend else "-"),
     ]):
         with column:
             metric_card(*item)
@@ -802,15 +803,15 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         fig.update_layout(title="구독 유형별 연락 배정", xaxis_title=None, yaxis_title="연락 인원", coloraxis_colorbar_title="위험 점수 합계")
         st.plotly_chart(plot_style(fig, 360), width="stretch")
 
-    st.markdown('<div class="section-label">연락 범위별 가정 순편익 곡선</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">연락 범위별 가정 매출효과-비용 곡선</div>', unsafe_allow_html=True)
     curve_mode = st.radio("곡선 비교 방식", ["현재 요금제별 설정", "접촉 단가 시나리오 비교"], horizontal=True, key="campaign_curve_mode")
     scenario_costs: list[float] = []
     if curve_mode == "접촉 단가 시나리오 비교":
         c1, c2, c3 = st.columns(3)
         scenario_costs = [
-            float(c1.number_input("낮은 단가(원)", min_value=0, value=3000, step=500)),
-            float(c2.number_input("중간 단가(원)", min_value=0, value=6000, step=500)),
-            float(c3.number_input("높은 단가(원)", min_value=0, value=9000, step=500)),
+            float(c1.number_input("낮은 단가(원)", min_value=0, value=100, step=100)),
+            float(c2.number_input("중간 단가(원)", min_value=0, value=1000, step=100)),
+            float(c3.number_input("높은 단가(원)", min_value=0, value=5000, step=100)),
         ]
 
     def net_curve(frame: pd.DataFrame, fixed_cost: float | None = None) -> tuple[np.ndarray, np.ndarray]:
@@ -837,12 +838,12 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
                     fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"접촉 단가 {cost:,.0f}원", line={"color": color, "dash": dash, "width": 3}))
             else:
                 x, y = net_curve(frame)
-                fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="가정 순편익", fill="tozeroy", line={"color": COLORS["orange"], "width": 3}))
+                fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="가정 매출효과-비용", fill="tozeroy", line={"color": COLORS["orange"], "width": 3}))
                 if name == "전체" and selected_count:
                     marker_index = int(np.argmin(np.abs(x - selected_count / pool * 100)))
                     fig.add_trace(go.Scatter(x=[x[marker_index]], y=[y[marker_index]], mode="markers", name="현재 계획", marker={"size": 12, "color": COLORS["navy"]}))
             fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
-            fig.update_layout(title=f"{name} · 연락 범위별 가정 순편익", xaxis_title="그룹 내 상위 위험 고객 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 순편익(백만원)", legend_orientation="h")
+            fig.update_layout(title=f"{name} · 연락 범위별 가정 매출효과-비용", xaxis_title="그룹 내 상위 위험 고객 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 매출효과-비용(백만원)", legend_orientation="h")
             st.plotly_chart(plot_style(fig, 390), width="stretch")
     st.caption("모든 편익·ROI·유지 전환 값은 사용자 입력 가정에 따른 민감도 분석입니다. 실제 성과는 대조군을 둔 캠페인 실험과 미래 라벨로 검증해야 합니다.")
 
