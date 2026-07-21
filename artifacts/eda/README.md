@@ -3,7 +3,7 @@
 - Train: `125,000` rows × `20` columns
 - Test: `75,000` rows × `19` columns (no target)
 - Churn rate: `51.34%`
-- Generated PNG charts: `21`
+- Generated PNG charts: `22`
 
 ## Interpretation guardrail
 
@@ -16,6 +16,7 @@ Charts show association with the dataset label, not causal effects. `signup_date
 - `categorical_payment_method.png`
 - `categorical_payment_plan.png`
 - `categorical_subscription_type.png`
+- `feature_importance.png`
 - `numeric_age.png`
 - `numeric_average_session_length.png`
 - `numeric_notifications_clicked.png`

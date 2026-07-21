@@ -137,7 +137,7 @@ def report_rule(train: pd.DataFrame) -> None:
 def report_ceiling(train: pd.DataFrame) -> None:
     print()
     print("=" * 70)
-    print("4. HELD-OUT COMPARISON  (60/20/20 stratified, fit on train only)")
+    print("4. DIAGNOSTIC MODEL COMPARISON  (60/20/20 stratified)")
     print("=" * 70)
     y = train.churned.astype(int)
     X = train.drop(columns=["churned"])
@@ -152,6 +152,8 @@ def report_ceiling(train: pd.DataFrame) -> None:
             f"acc@.5={accuracy_score(y_test, (probability >= 0.5).astype(int)):.4f}"
         )
 
+    # Bucket boundaries were identified during full-data EDA. This simple-logit
+    # benchmark is therefore explanatory, not a pristine model-selection test.
     columns = pd.get_dummies(bucketize(X), drop_first=True).columns
     D_train = pd.get_dummies(bucketize(X_train), drop_first=True).reindex(columns=columns, fill_value=0).astype(float)
     D_test = pd.get_dummies(bucketize(X_test), drop_first=True).reindex(columns=columns, fill_value=0).astype(float)
@@ -167,6 +169,29 @@ def report_ceiling(train: pd.DataFrame) -> None:
     A_test = pd.get_dummies(X_test.drop(columns=["customer_id"])).reindex(columns=A_train.columns, fill_value=0)
     gb_all = GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=3, random_state=RANDOM_STATE)
     score("GB on all 18 features (current)", gb_all.fit(A_train, y_train).predict_proba(A_test)[:, 1])
+
+
+def held_out_targeting_metrics(train: pd.DataFrame) -> pd.DataFrame:
+    """Use only predictions from an internal holdout to rank customers."""
+    artifact_path = ROOT / "artifacts" / "targeting_metrics_test.csv"
+    if artifact_path.exists():
+        return pd.read_csv(artifact_path)
+
+    # Fallback for a first run before the main pipeline writes artifacts.
+    from src.run_pipeline import model_pipeline, targeting_metrics
+
+    X = train.drop(columns=["churned"])
+    y = train["churned"].astype(int)
+    X_train, X_rest, y_train, y_rest = train_test_split(
+        X, y, test_size=0.4, stratify=y, random_state=RANDOM_STATE
+    )
+    _, X_test, _, y_test = train_test_split(
+        X_rest, y_rest, test_size=0.5, stratify=y_rest, random_state=RANDOM_STATE
+    )
+    model = GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=3, random_state=RANDOM_STATE)
+    pipe = model_pipeline(X_train, model, engineer=True, scale_numeric=False)
+    pipe.fit(X_train, y_train)
+    return targeting_metrics(y_test, pipe.predict_proba(X_test)[:, 1])
 
 
 def make_charts(train: pd.DataFrame, spread: pd.Series) -> None:
@@ -255,7 +280,7 @@ def make_charts(train: pd.DataFrame, spread: pd.Series) -> None:
     fig.savefig(OUT / "05_age_u_curve.png", dpi=150)
     plt.close(fig)
 
-    # 6. model ceiling (values printed by report_ceiling)
+    # 6. diagnostic benchmark (the simple-logit boundaries were identified in EDA)
     names = ["Dummy\n(prior)", "14-param\nlogit", "GB\n7 features", "GB\n18 features\n(current)", "Saturated\ncells"]
     values = [0.5134, 0.9468, 0.9464, 0.9473, 0.9491]
     fig, ax = plt.subplots(figsize=(8.5, 4.6))
@@ -263,29 +288,25 @@ def make_charts(train: pd.DataFrame, spread: pd.Series) -> None:
     for bar, value in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, value + 0.01, f"{value:.4f}", ha="center", fontsize=9)
     ax.axhline(values[-1], color="#333", ls="--", lw=1)
-    ax.set(title="Test PR-AUC - the model is already at the data's ceiling", ylabel="Test PR-AUC", ylim=(0.45, 1.03))
+    ax.set(title="Diagnostic PR-AUC benchmark (not a locked model-selection test)", ylabel="PR-AUC", ylim=(0.45, 1.03))
     fig.tight_layout()
     fig.savefig(OUT / "06_model_ceiling.png", dpi=150)
     plt.close(fig)
 
-    # 7. cumulative capture curve
-    buckets = bucketize(train)
-    score = pd.concat([buckets, y], axis=1).groupby(BUCKET_KEYS, observed=True)["churned"].transform("mean")
-    order = np.argsort(-score.to_numpy())
-    captured = np.cumsum(y.to_numpy()[order]) / y.sum()
-    contacted = np.arange(1, len(y) + 1) / len(y)
+    # 7. cumulative capture curve based on held-out model probabilities only.
+    targeting = held_out_targeting_metrics(train).sort_values("top_percent")
     fig, ax = plt.subplots(figsize=(7.5, 5))
-    ax.plot(contacted * 100, captured * 100, color=RED, lw=2, label="model")
-    ax.plot([0, 100], [0, 100], color=GREY, ls="--", label="random")
-    for k in (10, 20, 30):
-        value = captured[int(len(y) * k / 100) - 1] * 100
+    ax.plot(targeting["top_percent"], targeting["capture_rate"] * 100, marker="o", color=RED, lw=2, label="held-out model")
+    ax.plot(targeting["top_percent"], targeting["top_percent"], color=GREY, ls="--", label="random")
+    for _, row in targeting[targeting["top_percent"].isin([10, 20, 30])].iterrows():
+        k, value = int(row["top_percent"]), float(row["capture_rate"]) * 100
         ax.plot([k, k], [0, value], color=BLUE, ls=":", lw=1)
         ax.text(k + 1, value - 4, f"top {k}% -> {value:.0f}%", fontsize=9, color=BLUE)
     ax.set(
         title="Cumulative churner capture by risk rank",
         xlabel="% of customers contacted (highest risk first)",
         ylabel="% of churners captured",
-        xlim=(0, 100),
+        xlim=(0, 52),
         ylim=(0, 100),
     )
     ax.legend()
@@ -300,7 +321,7 @@ def make_charts(train: pd.DataFrame, spread: pd.Series) -> None:
     print("=" * 70)
     for path in sorted(OUT.glob("*.png")):
         print(f"  {path.relative_to(ROOT)}")
-    print("  top-K capture:", {f"{k}%": f"{captured[int(len(y) * k / 100) - 1]:.1%}" for k in (10, 20, 30, 50)})
+    print("  held-out top-K capture:", {f"{int(row.top_percent)}%": f"{row.capture_rate:.1%}" for row in targeting.itertuples()})
 
 
 def main() -> None:

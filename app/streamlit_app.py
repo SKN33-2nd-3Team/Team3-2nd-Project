@@ -22,6 +22,12 @@ DATA_DIR = ROOT / "data"
 ARTIFACT_DIR = ROOT / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model" / "music_churn_pipeline.joblib"
 METADATA_PATH = ARTIFACT_DIR / "model" / "metadata.json"
+TARGETING_PATH = ARTIFACT_DIR / "targeting_metrics_test.csv"
+DECILE_PATH = ARTIFACT_DIR / "decile_calibration_test.csv"
+SCENARIOS_PATH = ARTIFACT_DIR / "operating_scenarios.csv"
+CANDIDATE_METADATA_PATH = ROOT / "models" / "candidates" / "20260721_submission_bounded_v1" / "metadata.json"
+PROGRESSION_PATH = ARTIFACT_DIR / "performance_progression.csv"
+DECISION_MATRIX_PATH = ARTIFACT_DIR / "model_selection_decision_matrix.csv"
 
 st.set_page_config(
     page_title="PlaylistPro Insight",
@@ -39,7 +45,27 @@ st.markdown(
     h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; color: var(--ink); letter-spacing:-.02em; }
     .stApp { background: #f7f8fa; color: var(--ink); }
     [data-testid="stSidebar"] { background: #102235; border-right: 0; }
-    [data-testid="stSidebar"] * { color: #e8eef5 !important; }
+    /* Keep navigation and explanatory copy legible on the fixed dark sidebar,
+       while letting Streamlit form controls use the active app theme. */
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] *,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] label *,
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary * { color: #e8eef5 !important; }
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div * {
+        color: var(--text-color, #111827) !important;
+    }
+    [data-testid="stSidebar"] code {
+        background: rgba(255,255,255,.14) !important;
+        border: 1px solid rgba(255,255,255,.20);
+        border-radius: .35rem;
+        color: #ffffff !important;
+        padding: .08rem .32rem;
+    }
     [data-testid="stSidebar"] .stRadio label { padding: .55rem .65rem; border-radius: .55rem; }
     [data-testid="stSidebar"] .stRadio label:hover { background: rgba(255,255,255,.08); }
     .brand { padding: .4rem 0 1.4rem 0; }
@@ -82,18 +108,47 @@ def load_model():
 
 
 @st.cache_data(show_spinner=False)
-def load_artifacts() -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, pd.DataFrame]:
+def load_artifacts() -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    dict,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
     comparison = pd.read_csv(ARTIFACT_DIR / "model_comparison.csv")
     threshold = pd.read_csv(ARTIFACT_DIR / "threshold_sweep_validation.csv")
     importance_path = ARTIFACT_DIR / "feature_importance.csv"
     importance = pd.read_csv(importance_path) if importance_path.exists() else pd.DataFrame(columns=["feature", "importance", "rank"])
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
     predictions = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
-    return comparison, threshold, metadata, predictions, importance
+    targeting = pd.read_csv(TARGETING_PATH)
+    deciles = pd.read_csv(DECILE_PATH)
+    scenarios = pd.read_csv(SCENARIOS_PATH)
+    return comparison, threshold, metadata, predictions, importance, targeting, deciles, scenarios
+
+
+@st.cache_data(show_spinner=False)
+def load_presentation_evidence() -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """Load saved evidence only; never fit or promote a candidate from the app."""
+    candidate = json.loads(CANDIDATE_METADATA_PATH.read_text(encoding="utf-8")) if CANDIDATE_METADATA_PATH.exists() else {}
+    progression = pd.read_csv(PROGRESSION_PATH) if PROGRESSION_PATH.exists() else pd.DataFrame()
+    decision_matrix = pd.read_csv(DECISION_MATRIX_PATH) if DECISION_MATRIX_PATH.exists() else pd.DataFrame()
+    return candidate, progression, decision_matrix
 
 
 def safe_load():
-    required = [DATA_DIR / "train.csv", DATA_DIR / "test.csv", MODEL_PATH, METADATA_PATH]
+    required = [
+        DATA_DIR / "train.csv",
+        DATA_DIR / "test.csv",
+        MODEL_PATH,
+        METADATA_PATH,
+        TARGETING_PATH,
+        DECILE_PATH,
+        SCENARIOS_PATH,
+    ]
     missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
     if missing:
         st.error("필수 파일이 없습니다: " + ", ".join(missing))
@@ -108,11 +163,26 @@ def metric_card(label: str, value: str, sub: str = ""):
     )
 
 
-def risk_level(probability: float, threshold: float) -> tuple[str, str]:
-    if probability >= threshold:
-        return "고위험", "risk-high"
-    if probability >= threshold * 0.65:
-        return "관찰", "risk-mid"
+def scenario_label(row: pd.Series) -> str:
+    return f"{row['scenario_label']} (threshold {float(row['threshold']):.2f})"
+
+
+def get_scenario(scenarios: pd.DataFrame, scenario_id: str) -> pd.Series:
+    selected = scenarios.loc[scenarios["scenario_id"] == scenario_id]
+    if selected.empty:
+        return scenarios.iloc[0]
+    return selected.iloc[0]
+
+
+def risk_level(probability: float, scenarios: pd.DataFrame) -> tuple[str, str]:
+    ordered = scenarios.sort_values("threshold")
+    aggressive, balanced, precision = ordered.iloc[0], ordered.iloc[1], ordered.iloc[-1]
+    if probability >= float(precision["threshold"]):
+        return "정밀 우선", "risk-high"
+    if probability >= float(balanced["threshold"]):
+        return "균형 대응", "risk-high"
+    if probability >= float(aggressive["threshold"]):
+        return "관찰 후보", "risk-mid"
     return "저위험", "risk-low"
 
 
@@ -134,13 +204,57 @@ def header(title: str, description: str):
     st.caption(description)
 
 
-def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFrame, metadata: dict, predictions: pd.DataFrame):
+def candidate_status_card(candidate: dict):
+    """Make the candidate boundary visible wherever model evidence is discussed."""
+    if not candidate:
+        st.info("No saved technical candidate metadata is available in this workspace.")
+        return
+    validation = candidate.get("metrics", {}).get("validation", {})
+    holdout = candidate.get("metrics", {}).get("internal_test_holdout", {})
+    candidate_name = str(candidate.get("candidate_model", "unknown")).upper()
+    status = str(candidate.get("status", "UNKNOWN"))
+    st.markdown(
+        f'<div class="info-card"><b>Technical candidate — {candidate_name}</b><br>'
+        f'Status: <b>{status}</b>. This is saved validation evidence, not the model used by the live demo scorer. '
+        'Promotion, prediction horizon, and campaign impact remain unverified.</div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("Candidate validation PR-AUC", f"{validation.get('pr_auc', float('nan')):.3f}", "saved isolated run")
+    with c2:
+        metric_card("Candidate holdout PR-AUC", f"{holdout.get('pr_auc', float('nan')):.3f}", "internal holdout")
+    with c3:
+        metric_card("Reload check", "Passed" if candidate.get("reload_validation", {}).get("verified") else "Not verified", "saved candidate artifact")
+
+
+def overview_page(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    comparison: pd.DataFrame,
+    metadata: dict,
+    predictions: pd.DataFrame,
+    targeting: pd.DataFrame,
+    scenarios: pd.DataFrame,
+    active_scenario: pd.Series,
+    candidate: dict,
+):
     st.markdown(
         '<div class="hero"><div class="eyebrow" style="color:#ffb3a4">MUSIC RETENTION INTELLIGENCE</div><h1>이탈 신호를 읽고, 다음 행동을 설계하세요.</h1><p>구독·결제·청취 행동을 한 화면에서 탐색하고, 데이터셋 라벨 기준 이탈 위험을 고객 단위로 확인하는 PlaylistPro 분석 workspace입니다.</p><span class="tag">Light mode · Model inference only · FN 우선</span></div>',
         unsafe_allow_html=True,
     )
     st.markdown('<div class="info-card"><b>해석 범위 안내</b><br>현재 파일에는 관측 기준일·해지일·30일 라벨 생성 규칙이 없습니다. 따라서 아래 확률은 <b>데이터셋의 churned 라벨 기준</b>이며, 실제 향후 30일 해지 확률로 확정 표시하지 않습니다.</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="note-card"><b>현재 선택: {active_scenario["scenario_label"]}</b><br>'
+        f'{active_scenario["selection_rule"]} · threshold {float(active_scenario["threshold"]):.2f} · '
+        f'내부 Test 대상 비율 {float(active_scenario["test_target_rate"]):.1%}. '
+        '이 선택은 연락 우선순위의 운영 가정이며, 자동 할인·차단·발송을 실행하지 않습니다.</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="section-label">오늘의 데이터 snapshot</div>', unsafe_allow_html=True)
+    with st.expander("Model state and candidate evidence"):
+        st.markdown(f"**Demo inference model:** `{metadata['model']}`")
+        candidate_status_card(candidate)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         metric_card("학습 고객", f"{len(train):,}", "target 포함")
@@ -172,8 +286,13 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
         st.plotly_chart(plotly_theme(fig), width="stretch")
     with right:
         st.markdown('<div class="section-label">제공 test의 예측 snapshot</div>', unsafe_allow_html=True)
-        thr = float(metadata["validation_threshold"])
-        bins = pd.cut(predictions["churn_probability"], bins=[-0.01, thr * 0.65, thr, (1 + thr) / 2, 1.0], labels=["Low", "Watch", "High", "Very high"])
+        ordered = scenarios.sort_values("threshold")
+        cuts = ordered["threshold"].tolist()
+        bins = pd.cut(
+            predictions["churn_probability"],
+            bins=[-0.01, *cuts, 1.0],
+            labels=["모니터링", *ordered["scenario_label"].tolist()],
+        )
         risk_counts = bins.value_counts().sort_index().reset_index()
         risk_counts.columns = ["risk_band", "customers"]
         fig = px.bar(risk_counts, x="risk_band", y="customers", color="risk_band", color_discrete_sequence=["#8ac5a6", "#f2cb74", "#f19b78", "#d94a3a"])
@@ -182,6 +301,24 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
         st.markdown('<div class="small-caption">정답이 없는 test이므로 이 분포는 예측 결과 분포이며 실제 이탈률이 아닙니다.</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-label">운영자가 먼저 볼 인사이트</div>', unsafe_allow_html=True)
+    heldout = targeting.copy()
+    heldout["top_percent"] = heldout["top_percent"].map(lambda value: f"상위 {value:g}%")
+    heldout["precision"] = heldout["precision"].map(lambda value: f"{value:.1%}")
+    heldout["capture_rate"] = heldout["capture_rate"].map(lambda value: f"{value:.1%}")
+    st.dataframe(
+        heldout[["top_percent", "target_customers", "actual_churners_captured", "precision", "capture_rate", "lift"]],
+        column_config={
+            "top_percent": "내부 Test 상위 구간",
+            "target_customers": "대상 고객 수",
+            "actual_churners_captured": "포착된 실제 라벨 이탈자",
+            "precision": "Precision",
+            "capture_rate": "Capture rate",
+            "lift": st.column_config.NumberColumn("Lift", format="%.2f×"),
+        },
+        hide_index=True,
+        width="stretch",
+    )
+    st.caption("위 표는 내부 Test holdout에서 한 번 평가한 랭킹 성능입니다. 제공 test.csv의 실제 이탈이나 캠페인 효과를 뜻하지 않습니다.")
     inquiries = train.groupby("customer_service_inquiries")["churned"].mean().sort_values(ascending=False)
     st.dataframe(
         pd.DataFrame(
@@ -201,6 +338,22 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
 def eda_page(train: pd.DataFrame):
     header("Data Explorer", "각 입력 변수와 churned 라벨의 관계를 분포·이탈률·표본 수로 확인합니다.")
     feature_options = [c for c in train.columns if c not in ["customer_id", "churned"]]
+    st.markdown(
+        '<div class="info-card"><b>Customer insights: observed associations only</b><br>'
+        'Use the cards below as hypotheses for service and feature design, not as causal claims or automatic campaign rules.</div>',
+        unsafe_allow_html=True,
+    )
+    support_rates = train.groupby("customer_service_inquiries")["churned"].mean()
+    subscription_rates = train.groupby("subscription_type")["churned"].mean()
+    plan_rates = train.groupby("payment_plan")["churned"].mean()
+    listening_band = pd.qcut(train["weekly_hours"], q=4, duplicates="drop")
+    listening_rates = train.groupby(listening_band, observed=True)["churned"].mean()
+    insight_columns = st.columns(4)
+    insight_columns[0].metric("Support-contact spread", f"{support_rates.max() - support_rates.min():.1%}", "observed label-rate range")
+    insight_columns[1].metric("Subscription-type spread", f"{subscription_rates.max() - subscription_rates.min():.1%}", "segment association")
+    insight_columns[2].metric("Payment-plan spread", f"{plan_rates.max() - plan_rates.min():.1%}", "weak signal if near zero")
+    insight_columns[3].metric("Listening-quartile spread", f"{listening_rates.max() - listening_rates.min():.1%}", "behavioral association")
+    st.caption("Observed result → feature/design hypothesis → validate in an experiment. These associations do not establish churn causes.")
     # Open on the strongest signal; payment_plan is now the weakest (spread 0.001).
     default_column = "weekly_hours" if "weekly_hours" in feature_options else feature_options[0]
     selected = st.selectbox("분석할 컬럼", feature_options, index=feature_options.index(default_column))
@@ -254,15 +407,86 @@ def eda_page(train: pd.DataFrame):
     st.dataframe(pd.DataFrame(summary_rows, columns=["컬럼", "타입", "핵심 신호", "분포/범위", "해석"]), hide_index=True, width="stretch")
 
 
-def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict, importance: pd.DataFrame):
+def improvement_page(progression: pd.DataFrame, candidate: dict, decision_matrix: pd.DataFrame):
+    header(
+        "Improvement Journey",
+        "Saved experiments show how the baseline, feature work, and model screen changed ranking quality.",
+    )
+    st.markdown(
+        '<div class="info-card"><b>Evidence boundary</b><br>'
+        'This page reads saved historical experiment outputs. It does not rerun training, tune a threshold, or claim causal impact.</div>',
+        unsafe_allow_html=True,
+    )
+    if progression.empty:
+        st.warning("Saved performance-progression evidence is unavailable.")
+        return
+
+    raw_logistic = progression.loc[progression["model"].eq("logistic_raw")]
+    raw_pr_auc = float(raw_logistic.iloc[0]["pr_auc"]) if not raw_logistic.empty else float("nan")
+    candidate_pr_auc = float(candidate.get("metrics", {}).get("validation", {}).get("pr_auc", float("nan")))
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("Raw logistic PR-AUC", f"{raw_pr_auc:.3f}", "historical baseline")
+    with c2:
+        metric_card("Candidate validation PR-AUC", f"{candidate_pr_auc:.3f}", "saved LightGBM candidate")
+    with c3:
+        metric_card("Ranking-quality change", f"{candidate_pr_auc - raw_pr_auc:+.3f}", "different saved evaluation runs; directional only")
+
+    progress_view = progression[["stage", "experiment", "model", "adopted", "pr_auc", "roc_auc", "f1", "recall", "precision", "fn", "fp"]].copy()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=progress_view["experiment"], y=progress_view["pr_auc"], mode="lines+markers",
+        marker_color="#E4573D", line_color="#E4573D", name="PR-AUC",
+    ))
+    fig.add_trace(go.Scatter(
+        x=progress_view["experiment"], y=progress_view["roc_auc"], mode="lines+markers",
+        marker_color="#315A7D", line_color="#315A7D", name="ROC-AUC",
+    ))
+    fig.update_layout(title="Saved performance progression", xaxis_title=None, yaxis_title="Score", xaxis_tickangle=-28)
+    st.plotly_chart(plotly_theme(fig), width="stretch")
+
+    st.markdown('<div class="section-label">Adopted and excluded experiments</div>', unsafe_allow_html=True)
+    st.dataframe(
+        progress_view.style.format({metric: "{:.3f}" for metric in ["pr_auc", "roc_auc", "f1", "recall", "precision"]}),
+        hide_index=True,
+        width="stretch",
+    )
+    st.caption("Use this as the experiment narrative: observed result → hypothesis/feature or model change → metric movement → adopt or exclude. Feature importance is not a causal explanation.")
+
+    if not decision_matrix.empty:
+        st.markdown('<div class="section-label">Saved candidate selection evidence</div>', unsafe_allow_html=True)
+        selection_columns = ["model", "validation_pr_auc", "validation_roc_auc", "selection_status", "selection_reason"]
+        st.dataframe(decision_matrix[selection_columns], hide_index=True, width="stretch")
+        st.caption("The bounded candidate selection used validation PR-AUC. The wider fair-comparison run is still incomplete and is not presented here as a final result.")
+
+
+def model_page(
+    comparison: pd.DataFrame,
+    threshold: pd.DataFrame,
+    metadata: dict,
+    importance: pd.DataFrame,
+    targeting: pd.DataFrame,
+    deciles: pd.DataFrame,
+    scenarios: pd.DataFrame,
+    active_scenario: pd.Series,
+    candidate: dict,
+):
     header("Model Lab", "후보 모델 성능과 FN 우선 threshold trade-off를 확인합니다. Gradient Boosting을 최종 모델로 선정했습니다.")
+    st.markdown(
+        '<div class="note-card"><b>Operational-demo evidence</b><br>'
+        'The charts and threshold scenarios below belong to the saved Gradient Boosting demo pipeline. '
+        'They are not evidence that the separate LightGBM candidate has been deployed.</div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("Technical candidate status"):
+        candidate_status_card(candidate)
     best = comparison.iloc[0]
     st.markdown(f'<div class="note-card"><b>최종 선정 모델: {best["model"]}</b><br>Validation expected cost 기준으로 최종 선정했습니다. 비용비 FN:FP={metadata.get("false_negative_cost", 3):g}:1과 운영 threshold는 팀 가정이며 실제 사업 수치로 재검토해야 합니다.</div>', unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     with m1: metric_card("Test PR-AUC", f"{best['test_pr_auc']:.3f}", "ranking quality")
-    with m2: metric_card("Test Recall", f"{best['test_operating_recall']:.1%}", "operating threshold")
-    with m3: metric_card("Test Precision", f"{best['test_operating_precision']:.1%}", "operating threshold")
-    with m4: metric_card("Threshold", f"{best['validation_operating_threshold']:.2f}", "Validation 선택값")
+    with m2: metric_card("Test Recall", f"{float(active_scenario['test_recall']):.1%}", str(active_scenario["scenario_label"]))
+    with m3: metric_card("Test Precision", f"{float(active_scenario['test_precision']):.1%}", str(active_scenario["scenario_label"]))
+    with m4: metric_card("Threshold", f"{float(active_scenario['threshold']):.2f}", "사용자 선택 시나리오")
 
     left, right = st.columns([1.1, 1])
     with left:
@@ -295,6 +519,59 @@ def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict
     st.plotly_chart(plotly_theme(fig), width="stretch")
     st.markdown('<div class="small-caption">Threshold가 낮아지면 Recall은 보통 올라가지만 FP도 늘어납니다. 현재 비용비 3:1은 팀 가정이며, 운영 수용량과 실제 FN/FP 비용으로 재설정해야 합니다.</div>', unsafe_allow_html=True)
 
+    st.markdown('<div class="section-label">사용자가 고르는 운영 시나리오</div>', unsafe_allow_html=True)
+    scenario_view = scenarios[[
+        "scenario_label", "selection_rule", "threshold", "test_target_rate", "test_precision", "test_recall", "test_f1"
+    ]].copy()
+    scenario_view.columns = ["시나리오", "선택 기준", "Threshold", "내부 Test 대상 비율", "Test Precision", "Test Recall", "Test F1"]
+    st.dataframe(
+        scenario_view.style.format({
+            "Threshold": "{:.2f}",
+            "내부 Test 대상 비율": "{:.1%}",
+            "Test Precision": "{:.1%}",
+            "Test Recall": "{:.1%}",
+            "Test F1": "{:.3f}",
+        }),
+        hide_index=True,
+        width="stretch",
+    )
+    st.caption("세 시나리오는 모두 Validation에서 선택하고 내부 Test holdout에서 1회 평가했습니다. 어느 시나리오도 실제 캠페인 성과를 보장하지 않습니다.")
+
+    left, right = st.columns(2)
+    with left:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=targeting["top_percent"].map(lambda value: f"Top {value:g}%"),
+            y=targeting["capture_rate"],
+            name="Capture rate",
+            marker_color="#E4573D",
+            text=targeting["capture_rate"].map(lambda value: f"{value:.1%}"),
+            textposition="outside",
+        ))
+        fig.update_layout(title="내부 Test: 상위 구간별 실제 라벨 포착률", yaxis_tickformat=".0%", yaxis_range=[0, 1.08], showlegend=False)
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    with right:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["actual_churn_rate"], name="Actual", marker_color="#E4573D"))
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["mean_predicted_probability"], name="Predicted", marker_color="#315A7D"))
+        fig.update_layout(title="내부 Test: 위험 Decile 보정 진단", barmode="group", xaxis_title="위험 decile (10=최고)", yaxis_tickformat=".0%")
+        st.plotly_chart(plotly_theme(fig), width="stretch")
+    st.caption("확률과 실제 라벨 비율의 차이는 보정 오차 진단입니다. 따라서 앱의 확률은 ‘확정 해지 확률’이 아니라 우선순위 점수로 사용합니다.")
+
+    cm = np.array([
+        [int(active_scenario["test_tn"]), int(active_scenario["test_fp"])],
+        [int(active_scenario["test_fn"]), int(active_scenario["test_tp"])],
+    ])
+    fig = px.imshow(
+        cm,
+        text_auto=True,
+        x=["미대상", "대상"],
+        y=["실제 라벨 유지", "실제 라벨 이탈"],
+        color_continuous_scale="Blues",
+        title=f"내부 Test 혼동행렬 — {active_scenario['scenario_label']}",
+    )
+    st.plotly_chart(plotly_theme(fig), width="stretch")
+
     with st.expander("모델 한계와 데이터 리스크"):
         st.markdown("""
         - 현재 Test는 내부 분할 Test이며, 제공 `data/test.csv`는 정답이 없어 실제 성능을 검증하지 못합니다.
@@ -304,10 +581,11 @@ def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict
         """)
 
 
-def prediction_page(train: pd.DataFrame, model, metadata: dict):
-    header("Customer Scoring", "고객 정보를 입력하면 저장된 Pipeline이 이탈 위험 점수와 리텐션 확인 포인트를 반환합니다.")
-    threshold = float(metadata["validation_threshold"])
-    st.markdown(f'<div class="note-card"><b>모델 실행 방식</b><br>최종 선정된 `{metadata["model"]}` Pipeline만 로드합니다. 현재 threshold는 `{threshold:.2f}`이며 FN:FP 비용비 `{metadata.get("false_negative_cost", 3):g}:1` 기준의 팀 가정값입니다.</div>', unsafe_allow_html=True)
+def prediction_page(train: pd.DataFrame, model, metadata: dict, scenarios: pd.DataFrame, active_scenario: pd.Series, show_header: bool = True):
+    if show_header:
+        header("Customer Scoring", "고객 정보를 입력하면 저장된 Pipeline이 이탈 위험 점수와 리텐션 확인 포인트를 반환합니다.")
+    threshold = float(active_scenario["threshold"])
+    st.markdown(f'<div class="note-card"><b>모델 실행 방식</b><br>최종 선정된 `{metadata["model"]}` Pipeline만 로드합니다. 현재 선택은 <b>{active_scenario["scenario_label"]}</b> (`{threshold:.2f}`)이며, {active_scenario["selection_rule"]} 기준의 운영 가정입니다.</div>', unsafe_allow_html=True)
 
     with st.form("customer_form"):
         st.markdown('<div class="section-label">Subscription & profile</div>', unsafe_allow_html=True)
@@ -377,14 +655,21 @@ def prediction_page(train: pd.DataFrame, model, metadata: dict):
                 "notifications_clicked": notifications,
             }]
         )
+        input_columns = metadata.get("input_columns", [])
+        missing = sorted(set(input_columns) - set(row.columns))
+        unexpected = sorted(set(row.columns) - set(input_columns))
+        if missing or unexpected:
+            st.error(f"입력 스키마가 저장된 모델과 맞지 않습니다. 누락={missing}, 추가={unexpected}")
+            st.stop()
+        row = row.reindex(columns=input_columns)
         probability = float(model.predict_proba(row)[:, 1][0])
-        level, css = risk_level(probability, threshold)
+        level, css = risk_level(probability, scenarios)
         st.markdown('<div class="section-label">Scoring result</div>', unsafe_allow_html=True)
         r1, r2, r3 = st.columns(3)
         with r1: metric_card("Dataset-label churn probability", f"{probability:.1%}", "model score")
         with r2:
-            st.markdown(f'<div class="metric-card"><div class="metric-label">Risk level</div><div class="metric-value"><span class="{css}">{level}</span></div><div class="metric-delta">threshold {threshold:.2f}</div></div>', unsafe_allow_html=True)
-        with r3: metric_card("Decision", "우선 검토" if probability >= threshold else "일반 모니터링", "자동 조치 아님")
+            st.markdown(f'<div class="metric-card"><div class="metric-label">Risk band</div><div class="metric-value"><span class="{css}">{level}</span></div><div class="metric-delta">현재 선택 threshold {threshold:.2f}</div></div>', unsafe_allow_html=True)
+        with r3: metric_card("Decision", "우선 검토 후보" if probability >= threshold else "일반 모니터링", "자동 조치 아님")
         st.markdown('<div class="section-label">리텐션 검토 포인트</div>', unsafe_allow_html=True)
         actions = []
         type_rates_all = train.groupby("subscription_type")["churned"].mean()
@@ -392,12 +677,12 @@ def prediction_page(train: pd.DataFrame, model, metadata: dict):
             actions.append(f"{subscription_type} 요금제: 평균 대비 높은 이탈 세그먼트 — 전환·혜택 실험 후보")
         try:
             if float(pause_value) >= 3:
-                actions.append("구독 일시정지 3회 이상: 해지 전 행동 신호 — 우선 접촉 후보")
+                actions.append("구독 일시정지 3회 이상: 관찰상 연관 신호 — 정지 흐름 개선 실험 후보")
         except (TypeError, ValueError):
             pass
         inquiry_rates = train.groupby("customer_service_inquiries")["churned"].mean()
         if float(inquiry_rates.get(customer_service, 0)) >= train["churned"].mean() * 1.2:
-            actions.append("상담 문의 상위 구간: 불만 이슈 해결을 유지 활동 1순위로")
+            actions.append("상담 문의 상위 구간: 상담 경험 개선을 위한 실험 후보")
         if skip_rate >= train.song_skip_rate.quantile(.75): actions.append("높은 skip rate: 개인화 추천·탐색 경험의 추가 진단 후보")
         if weekly_hours <= train.weekly_hours.quantile(.25): actions.append("낮은 주간 청취: 재활성화 메시지·콘텐츠 추천 실험 후보")
         if not actions: actions.append("현재 입력만으로는 강한 단일 신호가 없으므로 전체 세그먼트 맥락과 함께 검토")
@@ -406,9 +691,15 @@ def prediction_page(train: pd.DataFrame, model, metadata: dict):
         st.caption("위 내용은 예측 신호에 기반한 실험 후보이며, 해지 원인·캠페인 효과를 의미하지 않습니다.")
 
 
-def batch_page(predictions: pd.DataFrame, metadata: dict):
-    header("Batch Prioritization", "정답이 없는 제공 test 고객의 예측 분포와 우선 검토 대상을 확인합니다.")
-    threshold = float(metadata["validation_threshold"])
+def batch_page(predictions: pd.DataFrame, scenarios: pd.DataFrame, active_scenario: pd.Series, show_header: bool = True):
+    if show_header:
+        header("Batch Prioritization", "정답이 없는 제공 test 고객의 예측 분포와 우선 검토 대상을 확인합니다.")
+    threshold = float(active_scenario["threshold"])
+    st.markdown(
+        f'<div class="note-card"><b>현재 선택: {active_scenario["scenario_label"]}</b><br>'
+        f'{active_scenario["selection_rule"]} · threshold {threshold:.2f}. 아래 CSV는 검토 후보 목록일 뿐이며 외부 발송·할인·계정 조치를 실행하지 않습니다.</div>',
+        unsafe_allow_html=True,
+    )
     min_probability = st.slider("최소 이탈 확률", 0.0, 1.0, threshold, 0.01)
     filtered = predictions[predictions["churn_probability"] >= min_probability].sort_values("churn_probability", ascending=False)
     c1, c2, c3 = st.columns(3)
@@ -418,16 +709,32 @@ def batch_page(predictions: pd.DataFrame, metadata: dict):
     st.markdown('<div class="info-card"><b>주의</b><br>제공 test에는 정답이 없으므로 고위험 고객 목록의 정확도나 실제 유지 효과는 여기서 검증할 수 없습니다. 운영 전에는 라벨과 캠페인 결과를 연결해야 합니다.</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-label">우선 검토 고객</div>', unsafe_allow_html=True)
     view = filtered.head(500).copy()
-    view["risk"] = np.where(view["churn_probability"] >= threshold, "High", "Watch")
+    view["risk_band"] = view["churn_probability"].map(lambda value: risk_level(float(value), scenarios)[0])
     st.dataframe(view, hide_index=True, width="stretch")
     st.download_button("현재 필터 결과 CSV 다운로드", data=filtered.to_csv(index=False).encode("utf-8-sig"), file_name="playlistpro_churn_priorities.csv", mime="text/csv", width="stretch")
 
 
-def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict):
-    header("Campaign Simulator", "예산·인원·상위 % 중 원하는 기준으로 캠페인 규모를 정하면, 고객별 예측 확률 순위로 기대 효과를 계산합니다.")
+def prioritization_page(
+    train: pd.DataFrame,
+    model,
+    metadata: dict,
+    predictions: pd.DataFrame,
+    scenarios: pd.DataFrame,
+    active_scenario: pd.Series,
+):
+    header("Customer Prioritization", "개별 고객 확인과 무라벨 제공 test 고객의 배치 우선순위를 한 곳에서 검토합니다.")
+    scoring_tab, batch_tab = st.tabs(["Customer scoring", "Batch prioritization"])
+    with scoring_tab:
+        prediction_page(train, model, metadata, scenarios, active_scenario, show_header=False)
+    with batch_tab:
+        batch_page(predictions, scenarios, active_scenario, show_header=False)
+
+
+def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict, active_scenario: pd.Series):
+    header("Campaign Simulator", "예산·인원·상위 % 중 하나를 기준으로 가정 기반의 캠페인 우선순위를 비교합니다.")
     st.markdown(
-        '<div class="note-card"><b>설계 원칙</b><br>접촉 비용·고객 가치·방어 성공률은 마케팅 담당자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
-        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음).</div>',
+        f'<div class="note-card"><b>가정 기반 시뮬레이션</b><br>현재 운영 선택은 <b>{active_scenario["scenario_label"]}</b>입니다. 접촉 비용·고객 가치·유지 전환율은 모두 사용자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
+        '모델 점수의 합은 확정 이탈자 수가 아니며, 제공 test에는 정답 라벨과 실제 캠페인 결과가 없습니다.</div>',
         unsafe_allow_html=True,
     )
 
@@ -542,22 +849,22 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
         st.markdown(f'<div class="small-caption">대상 풀 {pool:,}명 · 기대 이탈자 {work["prob"].sum():,.0f}명</div>', unsafe_allow_html=True)
         k1, k2, k3, k4 = st.columns(4)
         with k1: metric_card("집행액", f"{spend:,.0f}원", f"{n_sel:,}명 연락")
-        with k2: metric_card("기대 포착 이탈자", f"{caught:,.0f}명", f"방어 {saved:,.0f}명 (성공률 {success_rate:.0%})")
-        with k3: metric_card("연간 절감 기대액", f"{revenue:,.0f}원", "가치 가정 반영")
-        with k4: metric_card("순이익 · ROI", f"{net:,.0f}원", f"ROI {net / spend:.0%}" if spend > 0 else "-")
+        with k2: metric_card("확률 합산 위험도", f"{caught:,.0f}", f"가정상 유지 전환 {saved:,.0f} (전환율 {success_rate:.0%})")
+        with k3: metric_card("가정 기반 편익", f"{revenue:,.0f}원", "고객가치·전환율 가정 반영")
+        with k4: metric_card("가정 기반 순편익", f"{net:,.0f}원", f"가정상 ROI {net / spend:.0%}" if spend > 0 else "-")
 
     st.markdown('<div class="section-label">캠페인 퍼널</div>', unsafe_allow_html=True)
     miss = max(n_sel - caught, 0.0)
-    stages = ["방어 성공", "기대 포착 이탈자", "연락 대상", "대상 고객(선택 요금제)"]
+    stages = ["가정상 유지 전환", "확률 합산 위험도", "연락 대상", "대상 고객(선택 요금제)"]
     fig = go.Figure()
     fig.add_trace(go.Bar(y=stages, x=[0, 0, 0, pool], orientation="h", name="대상 고객", marker_color="#b4b2a9", showlegend=False))
-    fig.add_trace(go.Bar(y=stages, x=[0, caught, caught, 0], orientation="h", name="적중(진짜 이탈 예정)", marker_color="#d03b3b"))
-    fig.add_trace(go.Bar(y=stages, x=[0, 0, miss, 0], orientation="h", name="오경보", marker_color="#eda100"))
-    fig.add_trace(go.Bar(y=stages, x=[saved, 0, 0, 0], orientation="h", name="방어 성공", marker_color="#008300", showlegend=False))
+    fig.add_trace(go.Bar(y=stages, x=[0, caught, caught, 0], orientation="h", name="확률 합산 위험도", marker_color="#d03b3b"))
+    fig.add_trace(go.Bar(y=stages, x=[0, 0, miss, 0], orientation="h", name="비위험 추정", marker_color="#eda100"))
+    fig.add_trace(go.Bar(y=stages, x=[saved, 0, 0, 0], orientation="h", name="가정상 유지 전환", marker_color="#008300", showlegend=False))
     fig.update_layout(barmode="stack", height=280, xaxis_range=[0, pool * 1.05], xaxis_title=None, yaxis_title=None)
     st.plotly_chart(plotly_theme(fig), width="stretch")
     if n_sel:
-        st.markdown(f'<div class="small-caption">연락 대상 {n_sel:,}명 중 기대 적중 {caught:,.0f}명 · 오경보 {n_sel - caught:,.0f}명 (정밀도 {caught / n_sel:.1%})</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="small-caption">연락 대상 {n_sel:,}명 중 확률 합산 위험도 {caught:,.0f} · 비위험 추정 {n_sel - caught:,.0f} (평균 점수 {caught / n_sel:.1%})</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-label">연락 범위별 순이익 곡선</div>', unsafe_allow_html=True)
     curve_mode = st.radio("곡선 모드", ["현재 설정 기준", "단가 시나리오 비교"], horizontal=True)
@@ -616,28 +923,56 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
 
 
 def main():
-    (train, test), model, (comparison, threshold, metadata, predictions, importance) = safe_load()
+    (train, test), model, (comparison, threshold, metadata, predictions, importance, targeting, deciles, scenarios) = safe_load()
+    candidate, progression, decision_matrix = load_presentation_evidence()
+    default_scenario_id = metadata.get("app_default_scenario_id", "balanced_f1")
+    scenario_ids = scenarios["scenario_id"].tolist()
+    default_index = scenario_ids.index(default_scenario_id) if default_scenario_id in scenario_ids else 0
     with st.sidebar:
         st.markdown('<div class="brand"><span class="brand-mark">♫</span><span class="brand-name">PlaylistPro</span></div>', unsafe_allow_html=True)
         st.caption("Insight workspace")
-        page = st.radio("Workspace", ["Overview", "Data Explorer", "Model Lab", "Customer Scoring", "Batch Prioritization", "Campaign Simulator"], label_visibility="collapsed")
+        page = st.radio(
+            "Workspace",
+            ["Project Summary", "Customer Insights", "Improvement Journey", "Model & Operations", "Customer Prioritization"],
+            label_visibility="collapsed",
+        )
         st.divider()
         st.markdown(f"**Model**  `{metadata['model']}`")
-        st.markdown(f"**Threshold**  `{metadata['validation_threshold']:.2f}`")
-        st.markdown("<div class='small-caption'>Dataset-label score<br>30-day horizon unverified</div>", unsafe_allow_html=True)
+        active_id = st.selectbox(
+            "운영 시나리오",
+            scenario_ids,
+            index=default_index,
+            format_func=lambda scenario_id: scenario_label(get_scenario(scenarios, scenario_id)),
+        )
+        active_scenario = get_scenario(scenarios, active_id)
+        st.markdown(f"**Threshold**  `{float(active_scenario['threshold']):.2f}`")
+        if candidate:
+            st.markdown(f"**Candidate**  `{str(candidate.get('candidate_model', 'unknown')).upper()}`")
+            candidate_status = str(candidate.get("status", "UNKNOWN"))
+            sidebar_status = "Candidate saved · awaiting review" if candidate_status == "MODEL_CANDIDATE_SAVED_AWAITING_REVIEW" else candidate_status
+            st.caption(sidebar_status)
+        st.markdown("<div class='small-caption'>Dataset-label score<br>30-day horizon unverified<br>Campaign effect unverified</div>", unsafe_allow_html=True)
+        with st.expander("Reference analysis"):
+            show_simulator = st.checkbox(
+                "Open assumption-based campaign simulator",
+                help="This is a planning sensitivity tool, not observed campaign uplift or ROI.",
+            )
 
-    if page == "Overview":
-        overview_page(train, test, comparison, metadata, predictions)
-    elif page == "Data Explorer":
+    if page == "Project Summary":
+        overview_page(train, test, comparison, metadata, predictions, targeting, scenarios, active_scenario, candidate)
+    elif page == "Customer Insights":
         eda_page(train)
-    elif page == "Model Lab":
-        model_page(comparison, threshold, metadata, importance)
-    elif page == "Customer Scoring":
-        prediction_page(train, model, metadata)
-    elif page == "Batch Prioritization":
-        batch_page(predictions, metadata)
+    elif page == "Improvement Journey":
+        improvement_page(progression, candidate, decision_matrix)
+    elif page == "Model & Operations":
+        model_page(comparison, threshold, metadata, importance, targeting, deciles, scenarios, active_scenario, candidate)
     else:
-        simulator_page(test, predictions, metadata)
+        prioritization_page(train, model, metadata, predictions, scenarios, active_scenario)
+
+    if show_simulator:
+        st.divider()
+        st.caption("Reference analysis — assumption-based only")
+        simulator_page(test, predictions, metadata, active_scenario)
 
 
 if __name__ == "__main__":

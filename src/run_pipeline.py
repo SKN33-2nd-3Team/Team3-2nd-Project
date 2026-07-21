@@ -27,7 +27,6 @@ from sklearn.metrics import (
     average_precision_score,
     balanced_accuracy_score,
     brier_score_loss,
-    classification_report,
     confusion_matrix,
     fbeta_score,
     f1_score,
@@ -53,6 +52,7 @@ MODEL_DIR = ARTIFACT_DIR / "model"
 RANDOM_STATE = 42
 FN_COST = 3.0
 FP_COST = 1.0
+TOP_K_PERCENTS = (5, 10, 20, 30, 50)
 
 
 def json_safe(value):
@@ -333,6 +333,145 @@ def choose_operating_threshold(y_true: pd.Series, probability: np.ndarray) -> tu
     return float(best["threshold"]), table
 
 
+def targeting_metrics(y_true: pd.Series, probability: np.ndarray) -> pd.DataFrame:
+    """Evaluate rank-based targeting on held-out predictions only."""
+    truth = np.asarray(y_true, dtype=int)
+    order = np.argsort(-np.asarray(probability, dtype=float))
+    baseline = float(truth.mean())
+    positives = int(truth.sum())
+    rows = []
+    for percent in TOP_K_PERCENTS:
+        count = int(len(truth) * percent / 100)
+        selected = truth[order[:count]]
+        captured = int(selected.sum())
+        precision = float(selected.mean())
+        rows.append(
+            {
+                "top_percent": percent,
+                "target_customers": count,
+                "actual_churners_captured": captured,
+                "precision": precision,
+                "capture_rate": float(captured / positives) if positives else 0.0,
+                "lift": float(precision / baseline) if baseline else 0.0,
+                "baseline_churn_rate": baseline,
+                "evaluation_split": "internal_test_holdout",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def decile_metrics(y_true: pd.Series, probability: np.ndarray) -> pd.DataFrame:
+    """Create a reliability/targeting table without using labels to rank rows."""
+    frame = pd.DataFrame({"actual_churn": np.asarray(y_true, dtype=int), "probability": probability})
+    # Rank breaks ties deterministically so all ten deciles contain the same number of rows.
+    frame["risk_decile"] = pd.qcut(frame["probability"].rank(method="first"), 10, labels=False) + 1
+    table = (
+        frame.groupby("risk_decile", observed=True)
+        .agg(
+            customers=("actual_churn", "size"),
+            actual_churners=("actual_churn", "sum"),
+            actual_churn_rate=("actual_churn", "mean"),
+            mean_predicted_probability=("probability", "mean"),
+        )
+        .reset_index()
+        .sort_values("risk_decile", ascending=False)
+    )
+    table["calibration_gap"] = table["actual_churn_rate"] - table["mean_predicted_probability"]
+    table["evaluation_split"] = "internal_test_holdout"
+    return table
+
+
+def select_operating_scenarios(
+    y_val: pd.Series,
+    val_probability: np.ndarray,
+    y_test: pd.Series,
+    test_probability: np.ndarray,
+    threshold_table: pd.DataFrame,
+) -> pd.DataFrame:
+    """Expose policy options without treating any business cost assumption as approved."""
+    aggressive = threshold_table.sort_values(
+        ["expected_cost_per_customer", "recall", "precision"], ascending=[True, False, False]
+    ).iloc[0]
+    balanced = threshold_table.sort_values(["f1", "recall", "precision"], ascending=[False, False, False]).iloc[0]
+    precision_candidates = threshold_table[threshold_table["precision"] >= 0.95]
+    precise = (
+        precision_candidates.sort_values(["recall", "precision"], ascending=[False, False]).iloc[0]
+        if not precision_candidates.empty
+        else threshold_table.sort_values(["precision", "recall"], ascending=[False, False]).iloc[0]
+    )
+    scenario_specs = [
+        ("aggressive_cost_3_to_1", "공격적 대응", "FN:FP=3:1 기대비용 최소", aggressive),
+        ("balanced_f1", "균형 대응", "Validation F1 최대", balanced),
+        ("precision_first", "정밀 대응", "Validation Precision 95% 이상 중 Recall 최대", precise),
+    ]
+    rows = []
+    for scenario_id, label, selection_rule, selected in scenario_specs:
+        threshold = float(selected["threshold"])
+        val = metrics_at_threshold(y_val, val_probability, threshold)
+        test = metrics_at_threshold(y_test, test_probability, threshold)
+        rows.append(
+            {
+                "scenario_id": scenario_id,
+                "scenario_label": label,
+                "selection_rule": selection_rule,
+                "threshold": threshold,
+                "validation_target_customers": int(round(float(selected["positive_rate"]) * len(y_val))),
+                "validation_target_rate": float(selected["positive_rate"]),
+                "validation_precision": val["precision"],
+                "validation_recall": val["recall"],
+                "validation_f1": val["f1"],
+                "validation_expected_cost_per_customer": float(selected["expected_cost_per_customer"]),
+                "test_target_customers": int(test["tp"] + test["fp"]),
+                "test_target_rate": float((test["tp"] + test["fp"]) / len(y_test)),
+                "test_tp": test["tp"],
+                "test_fn": test["fn"],
+                "test_fp": test["fp"],
+                "test_tn": test["tn"],
+                "test_precision": test["precision"],
+                "test_recall": test["recall"],
+                "test_f1": test["f1"],
+                "evaluation_note": "Threshold selected on Validation and evaluated once on internal Test holdout.",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def write_targeting_artifacts(targeting: pd.DataFrame, deciles: pd.DataFrame) -> dict:
+    """Persist business-facing ranking and probability diagnostics from held-out data."""
+    targeting.to_csv(ARTIFACT_DIR / "targeting_metrics_test.csv", index=False, encoding="utf-8-sig")
+    deciles.to_csv(ARTIFACT_DIR / "decile_calibration_test.csv", index=False, encoding="utf-8-sig")
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
+    ax.plot(targeting["top_percent"], targeting["capture_rate"] * 100, marker="o", color="#D95D39", label="Held-out model")
+    ax.plot(targeting["top_percent"], targeting["top_percent"], color="#9AA5AD", ls="--", label="Random selection")
+    for _, row in targeting.iterrows():
+        ax.annotate(f"{row['capture_rate']:.1%}", (row["top_percent"], row["capture_rate"] * 100), xytext=(0, 8), textcoords="offset points", ha="center", fontsize=8)
+    ax.set(title="Held-out churner capture by targeting capacity", xlabel="Top-risk customers contacted (%)", ylabel="Churners captured (%)", xlim=(0, 52), ylim=(0, 100))
+    ax.legend()
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(ARTIFACT_DIR / "targeting_capture_test.png", dpi=150)
+    plt.close(fig)
+
+    plot = deciles.sort_values("risk_decile")
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
+    ax.plot(plot["risk_decile"], plot["actual_churn_rate"] * 100, marker="o", color="#D95D39", label="Observed churn rate")
+    ax.plot(plot["risk_decile"], plot["mean_predicted_probability"] * 100, marker="o", color="#315A7D", label="Mean predicted probability")
+    ax.set(title="Held-out decile calibration", xlabel="Risk decile (10 = highest)", ylabel="Rate / probability (%)", xticks=range(1, 11), ylim=(0, 100))
+    ax.legend()
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(ARTIFACT_DIR / "decile_calibration_test.png", dpi=150)
+    plt.close(fig)
+
+    return {
+        "top_k_evaluation_split": "internal_test_holdout",
+        "calibration_evaluation_split": "internal_test_holdout",
+        "calibration_mean_absolute_gap": float(deciles["calibration_gap"].abs().mean()),
+        "calibration_max_absolute_gap": float(deciles["calibration_gap"].abs().max()),
+    }
+
+
 def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
     X = train.drop(columns=["churned"])
     y = train["churned"].astype(int)
@@ -396,7 +535,13 @@ def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
         }
         results.append(row)
         fitted[name] = pipe
-        validation_probabilities[name] = {"probability": val_prob, "y": y_val, "threshold_table": threshold_table}
+        validation_probabilities[name] = {
+            "probability": val_prob,
+            "test_probability": test_prob,
+            "y": y_val,
+            "y_test": y_test,
+            "threshold_table": threshold_table,
+        }
 
     comparison = pd.DataFrame(results).sort_values(
         ["validation_expected_cost_per_customer", "validation_pr_auc", "validation_operating_recall"],
@@ -407,12 +552,27 @@ def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
     recommended_name = str(comparison.iloc[0]["model"])
     recommended_pipe = fitted[recommended_name]
     best_row = comparison.iloc[0]
+    best_scores = validation_probabilities[recommended_name]
+    targeting = targeting_metrics(best_scores["y_test"], best_scores["test_probability"])
+    deciles = decile_metrics(best_scores["y_test"], best_scores["test_probability"])
+    scenarios = select_operating_scenarios(
+        best_scores["y"],
+        best_scores["probability"],
+        best_scores["y_test"],
+        best_scores["test_probability"],
+        best_scores["threshold_table"],
+    )
+    targeting_summary = write_targeting_artifacts(targeting, deciles)
+    scenarios.to_csv(ARTIFACT_DIR / "operating_scenarios.csv", index=False, encoding="utf-8-sig")
     recommended_info = {
         "model": recommended_name,
         "selection_rule": f"lowest Validation expected cost with FN:FP={FN_COST:g}:1, then PR-AUC, then Recall; final model selected",
         "false_negative_cost": FN_COST,
         "false_positive_cost": FP_COST,
         "validation_threshold": float(best_row["validation_operating_threshold"]),
+        "app_default_scenario_id": "balanced_f1",
+        "operating_scenarios": scenarios.to_dict("records"),
+        "targeting_evaluation": targeting_summary,
         "train_rows": int(len(X_train)),
         "validation_rows": int(len(X_val)),
         "test_rows": int(len(X_test)),
@@ -453,9 +613,16 @@ def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
     joblib.dump(recommended_pipe, MODEL_DIR / "music_churn_pipeline.joblib")
     write_json(MODEL_DIR / "metadata.json", recommended_info)
 
-    best_val = validation_probabilities[recommended_name]
-    best_val["threshold_table"].to_csv(ARTIFACT_DIR / "threshold_sweep_validation.csv", index=False)
-    return comparison, recommended_info, {"pipeline": recommended_pipe, "X_test": X_test, "y_test": y_test, "fitted": fitted}
+    best_scores["threshold_table"].to_csv(ARTIFACT_DIR / "threshold_sweep_validation.csv", index=False)
+    return comparison, recommended_info, {
+        "pipeline": recommended_pipe,
+        "X_test": X_test,
+        "y_test": y_test,
+        "fitted": fitted,
+        "targeting": targeting,
+        "deciles": deciles,
+        "scenarios": scenarios,
+    }
 
 
 def write_feature_importance(pipeline: Pipeline) -> None:
@@ -486,7 +653,15 @@ def write_feature_importance(pipeline: Pipeline) -> None:
     plt.close(fig)
 
 
-def write_model_report(comparison: pd.DataFrame, recommended_info: dict, train: pd.DataFrame, test: pd.DataFrame) -> None:
+def write_model_report(
+    comparison: pd.DataFrame,
+    recommended_info: dict,
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    targeting: pd.DataFrame,
+    deciles: pd.DataFrame,
+    scenarios: pd.DataFrame,
+) -> None:
     best = comparison.iloc[0]
     lines = [
         "# Model Run Report",
@@ -515,6 +690,33 @@ def write_model_report(comparison: pd.DataFrame, recommended_info: dict, train: 
         )
     lines += [
         "",
+        "## Operating scenarios (selected on Validation, evaluated on internal Test)",
+        "",
+        "| Scenario | Threshold | Test target customers | Test precision | Test recall | Test TP | Test FN | Test FP |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for _, row in scenarios.iterrows():
+        lines.append(
+            f"| {row['scenario_label']} | {row['threshold']:.2f} | {int(row['test_target_customers']):,} | {row['test_precision']:.4f} | {row['test_recall']:.4f} | {int(row['test_tp']):,} | {int(row['test_fn']):,} | {int(row['test_fp']):,} |"
+        )
+    lines += [
+        "",
+        "## Held-out targeting metrics",
+        "",
+        "| Top-risk customers | Target customers | Precision | Churner capture | Lift |",
+        "|---:|---:|---:|---:|---:|",
+    ]
+    for _, row in targeting.iterrows():
+        lines.append(
+            f"| {int(row['top_percent'])}% | {int(row['target_customers']):,} | {row['precision']:.4f} | {row['capture_rate']:.4f} | {row['lift']:.4f} |"
+        )
+    lines += [
+        "",
+        "## Probability calibration diagnostic",
+        "",
+        f"- Mean absolute decile gap: `{deciles['calibration_gap'].abs().mean():.4f}`; maximum decile gap: `{deciles['calibration_gap'].abs().max():.4f}`.",
+        "- Campaign Simulator sums model probabilities for an assumption-based planning estimate. It is not an observed campaign outcome or an uplift estimate.",
+        "",
         "## Interpretation guardrails",
         "",
         "- Gradient Boosting is the final selected model based on the documented Validation selection rule.",
@@ -537,6 +739,8 @@ def write_test_predictions(train: pd.DataFrame, test: pd.DataFrame, recommended_
             "model": recommended_info["model"],
         }
     )
+    for scenario in recommended_info["operating_scenarios"]:
+        output[f"predicted_{scenario['scenario_id']}"] = (probability >= float(scenario["threshold"])).astype(int)
     output.to_csv(ARTIFACT_DIR / "test_predictions.csv", index=False, encoding="utf-8-sig")
 
 
@@ -548,7 +752,15 @@ def main() -> None:
     eda_summary = run_eda(train, test)
     comparison, recommended_info, run_context = fit_and_compare(train)
     write_feature_importance(run_context["pipeline"])
-    write_model_report(comparison, recommended_info, train, test)
+    write_model_report(
+        comparison,
+        recommended_info,
+        train,
+        test,
+        run_context["targeting"],
+        run_context["deciles"],
+        run_context["scenarios"],
+    )
     write_test_predictions(train, test, recommended_info, run_context["pipeline"])
 
     source_files = {
@@ -568,6 +780,11 @@ def main() -> None:
             "artifacts/model_comparison.csv",
             "artifacts/threshold_sweep_validation.csv",
             "artifacts/feature_importance.csv",
+            "artifacts/targeting_metrics_test.csv",
+            "artifacts/targeting_capture_test.png",
+            "artifacts/decile_calibration_test.csv",
+            "artifacts/decile_calibration_test.png",
+            "artifacts/operating_scenarios.csv",
             "artifacts/eda/feature_importance.png",
             "artifacts/test_predictions.csv",
             "artifacts/model/music_churn_pipeline.joblib",
