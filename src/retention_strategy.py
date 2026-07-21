@@ -15,6 +15,35 @@ import pandas as pd
 
 EVIDENCE_LEVEL = "관찰 연관성 기반 가설 · 캠페인 효과 미검증"
 
+# Presentation-planning assumptions, not observed revenue or campaign costs.
+# Premium keeps the existing team assumption of 120,000 KRW as the anchor.
+PLAN_ECONOMIC_ASSUMPTIONS: dict[str, dict[str, object]] = {
+    "Free": {
+        "contact_cost": 1_000,
+        "customer_value": 30_000,
+        "default_channel": "저비용 자동 메시지",
+        "basis": "Premium 가치의 25%를 광고·전환 잠재가치 대용치로 가정",
+    },
+    "Student": {
+        "contact_cost": 1_500,
+        "customer_value": 72_000,
+        "default_channel": "자동화 혜택 안내",
+        "basis": "Premium 가치의 60%를 학생 할인형 가치로 가정",
+    },
+    "Premium": {
+        "contact_cost": 3_000,
+        "customer_value": 120_000,
+        "default_channel": "개인화 디지털 접촉",
+        "basis": "요구사항의 팀 가정 연간 LTV 120,000원을 기준점으로 사용",
+    },
+    "Family": {
+        "contact_cost": 4_500,
+        "customer_value": 180_000,
+        "default_channel": "고관여 상담·혜택 안내",
+        "basis": "Premium 가치의 150%를 다인 계정 가치 대용치로 가정",
+    },
+}
+
 
 @dataclass(frozen=True)
 class StrategyThresholds:
@@ -23,6 +52,21 @@ class StrategyThresholds:
     low_weekly_hours: float
     high_skip_rate: float
     high_subscription_pauses: float
+
+
+def plan_economic_assumptions(plans: list[str]) -> pd.DataFrame:
+    """Return editable plan defaults with their explicit assumption basis."""
+
+    rows = []
+    for plan in plans:
+        assumption = PLAN_ECONOMIC_ASSUMPTIONS.get(plan, {
+            "contact_cost": 3_000,
+            "customer_value": 120_000,
+            "default_channel": "담당자 지정 필요",
+            "basis": "알 수 없는 유형이므로 Premium 기준값을 임시 적용",
+        })
+        rows.append({"plan": plan, **assumption})
+    return pd.DataFrame(rows)
 
 
 def derive_strategy_thresholds(train: pd.DataFrame) -> StrategyThresholds:
@@ -140,13 +184,14 @@ def recommend_retention_strategy(
             "action_rationale": lead["rationale"],
         }
         if signal_count >= 2 and campaign_tier == "집중 관리":
+            secondary_action = signals[1]["primary"] if signal_count >= 2 else lead["alternative"]
             result.update({
                 "strategy_segment": "복합 고위험형",
-                "primary_action": "담당자 집중 검토 후 가장 시급한 장애 요인 해결",
-                "alternative_action": lead["primary"],
+                "primary_action": lead["primary"],
+                "alternative_action": secondary_action,
                 "action_timing": "점수 산출 후 다음 접촉 회차 전에 담당자 검토",
-                "validation_kpi": "검토 완료율 · 접촉 성공률 · 실험군 유지율",
-                "action_rationale": f"행동 가능 위험 신호 {signal_count}개와 높은 위험 점수가 함께 확인됨",
+                "validation_kpi": f"{lead['kpi']} · 검토 완료율",
+                "action_rationale": f"행동 가능 위험 신호 {signal_count}개 중 '{lead['signal']}'을 1차 검토 신호로 적용",
             })
         elif campaign_tier == "관찰 유지":
             result.update({

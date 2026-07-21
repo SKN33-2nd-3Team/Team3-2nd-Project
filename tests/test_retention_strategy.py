@@ -3,6 +3,7 @@ import pandas as pd
 from src.retention_strategy import (
     StrategyThresholds,
     build_strategy_queue,
+    plan_economic_assumptions,
     recommend_retention_strategy,
 )
 
@@ -30,6 +31,7 @@ def test_sensitive_profile_fields_do_not_change_action_assignment():
     assert first == second
     assert first["strategy_segment"] == "복합 고위험형"
     assert first["risk_signal_count"] == 5
+    assert first["primary_action"] == "미해결 문의 확인 및 상담 우선 배정"
 
 
 def test_low_risk_customer_is_kept_in_observation_lane():
@@ -56,3 +58,11 @@ def test_batch_queue_contains_decision_fields_and_preserves_rows():
     assert len(queue) == 2
     assert {"strategy_segment", "primary_action", "validation_kpi", "evidence_level"}.issubset(queue.columns)
     assert queue.iloc[0]["customer_id"] == 1
+
+
+def test_plan_economic_defaults_are_differentiated_and_explained():
+    economics = plan_economic_assumptions(["Free", "Student", "Premium", "Family"])
+    assert economics["contact_cost"].nunique() == 4
+    assert economics["customer_value"].nunique() == 4
+    assert economics.set_index("plan").loc["Premium", "customer_value"] == 120_000
+    assert economics["basis"].str.len().min() > 0

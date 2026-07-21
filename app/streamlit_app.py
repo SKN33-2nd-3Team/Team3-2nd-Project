@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from src.retention_strategy import (  # noqa: E402
     build_strategy_queue,
     derive_strategy_thresholds,
+    plan_economic_assumptions,
     recommend_retention_strategy,
 )
 
@@ -691,17 +692,19 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         )
 
     counts = base.groupby("plan")["probability"].agg(["size", "mean"])
+    economic_defaults = plan_economic_assumptions(plan_order).set_index("plan")
     config = st.data_editor(
         pd.DataFrame({
             "구독 유형": plan_order,
             "보유 고객": [int(counts.loc[plan, "size"]) for plan in plan_order],
             "평균 위험 점수": [float(counts.loc[plan, "mean"]) for plan in plan_order],
+            "기본 접촉 채널": [str(economic_defaults.loc[plan, "default_channel"]) for plan in plan_order],
             "포함": True,
-            "접촉 비용(원)": 3000,
-            "고객 가치 가정(원)": 120000,
+            "접촉 비용(원)": [int(economic_defaults.loc[plan, "contact_cost"]) for plan in plan_order],
+            "고객 가치 가정(원)": [int(economic_defaults.loc[plan, "customer_value"]) for plan in plan_order],
         }),
         hide_index=True,
-        disabled=["구독 유형", "보유 고객", "평균 위험 점수"],
+        disabled=["구독 유형", "보유 고객", "평균 위험 점수", "기본 접촉 채널"],
         column_config={
             "평균 위험 점수": st.column_config.NumberColumn("평균 위험 점수", format="percent"),
             "포함": st.column_config.CheckboxColumn("포함"),
@@ -711,6 +714,13 @@ def campaign_planning_panel(test: pd.DataFrame, predictions: pd.DataFrame, scena
         width="stretch",
         key="campaign_plan_config",
     ).set_index("구독 유형")
+    with st.expander("구독 유형별 기본 가정의 추론 근거"):
+        assumption_view = economic_defaults.reset_index().rename(columns={
+            "plan": "구독 유형", "contact_cost": "기본 접촉 비용", "customer_value": "고객 가치 가정",
+            "default_channel": "기본 접촉 채널", "basis": "추론 근거",
+        })
+        st.dataframe(assumption_view, hide_index=True, width="stretch")
+        st.caption("가격·ARPU 원천 데이터가 없어 Premium 연 120,000원 팀 가정을 기준점으로 상대 추정했습니다. 모든 값은 편집 가능한 계획 가정입니다.")
 
     included = [plan for plan in plan_order if bool(config.loc[plan, "포함"])]
     if not included:
@@ -921,17 +931,46 @@ def prioritization_page(tables: dict, model, scenario: pd.Series) -> None:
                              color_discrete_map={"집중 관리": COLORS["orange"], "자동화 검토": COLORS["blue"], "관찰 유지": COLORS["green"]})
                 fig.update_layout(title="운영 단계 구성", showlegend=True)
                 st.plotly_chart(plot_style(fig, 340), width="stretch")
+        st.markdown('<div class="section-label">고객별 전략 검토 표</div>', unsafe_allow_html=True)
+        control_left, control_right = st.columns([1.2, 1])
+        with control_left:
+            queue_view_mode = st.radio(
+                "표시 방식",
+                ["운영 단계·세그먼트 대표 보기", "위험 점수 순"],
+                horizontal=True,
+                help="위험 점수 순은 최상위 고객 특성이 유사해 여러 컬럼이 반복될 수 있습니다.",
+            )
+        with control_right:
+            available_segments = filtered["strategy_segment"].drop_duplicates().tolist()
+            selected_segments = st.multiselect("전략 세그먼트 필터", available_segments, default=available_segments)
+        view_source = filtered.loc[filtered["strategy_segment"].isin(selected_segments)].copy()
+        if queue_view_mode == "운영 단계·세그먼트 대표 보기":
+            rows_per_segment = st.slider("운영 단계·세그먼트 조합별 표시 고객 수", 5, 100, 25, 5)
+            view_source["_representative_rank"] = view_source.groupby(
+                ["campaign_tier", "strategy_segment"], sort=False
+            ).cumcount()
+            table_rows = view_source.loc[view_source["_representative_rank"].lt(rows_per_segment)].sort_values(
+                ["_representative_rank", "campaign_tier", "strategy_segment"]
+            )
+        else:
+            table_rows = view_source.head(1000)
+
         display_columns = [
             "customer_id", "churn_probability", "campaign_tier", "strategy_segment",
             "risk_signal_count", "primary_signal", "primary_action", "alternative_action",
             "validation_kpi", "evidence_level",
         ]
-        display = filtered[display_columns].head(1000).rename(columns={
+        display = table_rows[display_columns].rename(columns={
             "customer_id": "고객 ID", "churn_probability": "위험 점수", "campaign_tier": "운영 단계",
             "strategy_segment": "전략 세그먼트", "risk_signal_count": "신호 수", "primary_signal": "1차 신호",
             "primary_action": "1순위 행동 후보", "alternative_action": "대안 행동", "validation_kpi": "검증 KPI",
             "evidence_level": "근거 수준",
         })
+        st.caption(
+            f"현재 표 {len(display):,}명 · 운영 단계 {display['운영 단계'].nunique()}개 · "
+            f"전략 세그먼트 {display['전략 세그먼트'].nunique()}개 · 1차 신호 {display['1차 신호'].nunique()}개 · "
+            f"1순위 행동 {display['1순위 행동 후보'].nunique()}개"
+        )
         st.dataframe(display, hide_index=True, width="stretch")
         st.download_button("전략 포함 검토 큐 CSV 다운로드", filtered.to_csv(index=False).encode("utf-8-sig"), "catboost_retention_strategy_queue.csv", "text/csv")
 
