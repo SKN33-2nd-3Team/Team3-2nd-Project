@@ -153,14 +153,12 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
 
     st.markdown('<div class="section-label">핵심 신호</div>', unsafe_allow_html=True)
     a, b, c = st.columns(3)
-    monthly = train.loc[train.payment_plan == "monthly", "churned"].mean()
-    annual = train.loc[train.payment_plan == "annual", "churned"].mean()
-    student = train.loc[train.subscription_type == "student", "churned"].mean()
-    family = train.loc[train.subscription_type == "family premium", "churned"].mean()
+    plan_rates = train.groupby("payment_plan")["churned"].mean()
+    type_rates = train.groupby("subscription_type")["churned"].mean().sort_values(ascending=False)
     with a:
-        metric_card("월간 vs 연간", f"{monthly - annual:+.1%}", "payment_plan 이탈률 차이")
+        metric_card("결제주기 격차", f"{plan_rates.max() - plan_rates.min():+.1%}", f"{plan_rates.idxmax()} vs {plan_rates.idxmin()}")
     with b:
-        metric_card("학생 요금제", f"{student:.1%}", "세그먼트 관찰 이탈률")
+        metric_card("최고위험 요금제", f"{type_rates.iloc[0]:.1%}", f"{type_rates.index[0]} 관찰 이탈률")
     with c:
         metric_card("모델 Test PR-AUC", f"{comparison.iloc[0]['test_pr_auc']:.3f}", f"{comparison.iloc[0]['model']} 기준")
 
@@ -174,7 +172,8 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
         st.plotly_chart(plotly_theme(fig), width="stretch")
     with right:
         st.markdown('<div class="section-label">제공 test의 예측 snapshot</div>', unsafe_allow_html=True)
-        bins = pd.cut(predictions["churn_probability"], bins=[-0.01, 0.2, 0.37, 0.6, 1.0], labels=["Low", "Watch", "High", "Very high"])
+        thr = float(metadata["validation_threshold"])
+        bins = pd.cut(predictions["churn_probability"], bins=[-0.01, thr * 0.65, thr, (1 + thr) / 2, 1.0], labels=["Low", "Watch", "High", "Very high"])
         risk_counts = bins.value_counts().sort_index().reset_index()
         risk_counts.columns = ["risk_band", "customers"]
         fig = px.bar(risk_counts, x="risk_band", y="customers", color="risk_band", color_discrete_sequence=["#8ac5a6", "#f2cb74", "#f19b78", "#d94a3a"])
@@ -183,13 +182,14 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
         st.markdown('<div class="small-caption">정답이 없는 test이므로 이 분포는 예측 결과 분포이며 실제 이탈률이 아닙니다.</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-label">운영자가 먼저 볼 인사이트</div>', unsafe_allow_html=True)
+    inquiries = train.groupby("customer_service_inquiries")["churned"].mean().sort_values(ascending=False)
     st.dataframe(
         pd.DataFrame(
             [
-                ["결제 주기", "monthly", f"{monthly:.1%}", "월간 결제 고객의 이탈률 차이를 리텐션 실험 후보로 확인"],
-                ["구독 유형", "student", f"{student:.1%}", "학생 고객군의 가격·혜택·사용 패턴을 별도 세그먼트로 검토"],
-                ["구독 유형", "family premium", f"{family:.1%}", "가족형 고객군의 상대적으로 낮은 관찰 이탈률 확인"],
-                ["결제 컬럼 품질", "num_subscription_pauses", "주의", "값이 annual/monthly라 컬럼명과 의미 불일치; 데이터 담당 확인 필요"],
+                ["구독 유형", str(type_rates.index[0]), f"{type_rates.iloc[0]:.1%}", "최고위험 요금제 — 전환·혜택 실험 1순위"],
+                ["구독 유형", str(type_rates.index[-1]), f"{type_rates.iloc[-1]:.1%}", "최저위험 요금제 — 유지 요인 벤치마크"],
+                ["상담 문의", str(inquiries.index[0]), f"{inquiries.iloc[0]:.1%}", "불만 신호와 이탈의 연관 — 상담 이슈 해결을 유지 활동에 연결"],
+                ["결제 주기", str(plan_rates.idxmax()), f"{plan_rates.max():.1%}", f"주기 간 격차 {plan_rates.max() - plan_rates.min():+.1%} — 연관성 점검"],
             ],
             columns=["관점", "세그먼트/필드", "관찰값", "다음 확인"],
         ),
@@ -205,7 +205,7 @@ def eda_page(train: pd.DataFrame):
     st.markdown('<div class="small-caption">모든 컬럼을 선택해 개별 target 관계를 확인할 수 있습니다. 그래프는 연관관계이며 인과관계가 아닙니다.</div>', unsafe_allow_html=True)
     left, right = st.columns([1.45, 1])
     with left:
-        if selected == "signup_date":
+        if selected == "signup_date" and not pd.api.types.is_numeric_dtype(train[selected]):
             view = train.assign(signup_year=pd.to_datetime(train[selected]).dt.year).groupby("signup_year")["churned"].agg(["mean", "size"]).reset_index()
             fig = px.bar(view, x="signup_year", y="mean", text=view["mean"].map(lambda x: f"{x:.1%}"), labels={"mean": "Churn rate", "signup_year": "Signup year"}, title="Signup cohort vs churn rate")
             fig.update_traces(marker_color="#E4573D", textposition="outside")
@@ -221,7 +221,7 @@ def eda_page(train: pd.DataFrame):
         st.plotly_chart(plotly_theme(fig), width="stretch")
     with right:
         st.markdown(f'<div class="section-label">{selected} quick read</div>', unsafe_allow_html=True)
-        if selected == "signup_date":
+        if selected == "signup_date" and not pd.api.types.is_numeric_dtype(train[selected]):
             dates = pd.to_datetime(train[selected])
             st.metric("기간", f"{dates.min():%Y-%m-%d} → {dates.max():%Y-%m-%d}")
             st.metric("고유 날짜", f"{dates.nunique():,}")
@@ -240,7 +240,7 @@ def eda_page(train: pd.DataFrame):
     st.markdown('<div class="section-label">전체 컬럼 관계 요약</div>', unsafe_allow_html=True)
     summary_rows = []
     for column in feature_options:
-        if column == "signup_date":
+        if column == "signup_date" and not pd.api.types.is_numeric_dtype(train[column]):
             series = pd.to_datetime(train[column])
             summary_rows.append([column, "date", f"{series.min():%Y-%m-%d} ~ {series.max():%Y-%m-%d}", "cohort only", "30일 라벨 미검증"])
         elif pd.api.types.is_numeric_dtype(train[column]):
@@ -315,30 +315,40 @@ def prediction_page(train: pd.DataFrame, model, metadata: dict):
             location = st.selectbox("Location", sorted(train.location.unique()), index=sorted(train.location.unique()).index("California") if "California" in train.location.unique() else 0)
             subscription_type = st.selectbox("Subscription type", sorted(train.subscription_type.unique()))
         with c2:
-            payment_plan = st.selectbox("Payment plan", sorted(train.payment_plan.unique()), index=1 if "monthly" in train.payment_plan.unique() else 0)
+            payment_plan = st.selectbox("Payment plan", sorted(train.payment_plan.unique()))
             pause_value = st.selectbox("num_subscription_pauses (실제 값)", sorted(train.num_subscription_pauses.unique()))
             payment_method = st.selectbox("Payment method", sorted(train.payment_method.unique()))
         with c3:
-            customer_service = st.selectbox("Customer service inquiries", ["none", "few", "some", "many"], index=1)
-            signup_default = pd.to_datetime(train.signup_date).median().date()
-            signup_date = st.date_input("Signup date", value=signup_default, min_value=pd.Timestamp("2013-01-01").date(), max_value=pd.Timestamp("2022-02-15").date())
-            st.caption("가입일은 cohort feature로만 사용되며, 30일 관측 창은 데이터에 없습니다.")
+            customer_service = st.selectbox("Customer service inquiries", sorted(train.customer_service_inquiries.unique()))
+            if pd.api.types.is_numeric_dtype(train.signup_date):
+                signup_date = st.number_input(
+                    "Signup date (기준일 대비 일수)",
+                    min_value=int(train.signup_date.min()),
+                    max_value=int(train.signup_date.max()),
+                    value=int(train.signup_date.median()),
+                    step=1,
+                )
+            else:
+                signup_default = pd.to_datetime(train.signup_date).median().date()
+                signup_date = st.date_input("Signup date", value=signup_default)
+            st.caption("가입 시점은 파생 feature로만 사용됩니다.")
 
         st.markdown('<div class="section-label">Listening behavior</div>', unsafe_allow_html=True)
         numeric_cols = ["weekly_hours", "average_session_length", "song_skip_rate", "weekly_songs_played", "weekly_unique_songs", "num_favorite_artists", "num_platform_friends", "num_playlists_created", "num_shared_playlists", "notifications_clicked"]
         defaults = {c: float(train[c].median()) for c in numeric_cols}
+        caps = {c: float(train[c].max()) * 1.5 for c in numeric_cols}
         row1 = st.columns(5)
-        weekly_hours = row1[0].number_input("Weekly hours", min_value=0.0, max_value=100.0, value=defaults["weekly_hours"], step=0.1)
-        avg_session = row1[1].number_input("Avg session length", min_value=0.0, max_value=20.0, value=defaults["average_session_length"], step=0.05)
+        weekly_hours = row1[0].number_input("Weekly hours", min_value=0.0, max_value=caps["weekly_hours"], value=defaults["weekly_hours"], step=0.1)
+        avg_session = row1[1].number_input("Avg session length", min_value=0.0, max_value=caps["average_session_length"], value=defaults["average_session_length"], step=0.05)
         skip_rate = row1[2].number_input("Song skip rate", min_value=0.0, max_value=1.0, value=defaults["song_skip_rate"], step=0.01)
-        songs = row1[3].number_input("Weekly songs played", min_value=0, max_value=2000, value=int(defaults["weekly_songs_played"]), step=1)
-        unique_songs = row1[4].number_input("Weekly unique songs", min_value=0, max_value=2000, value=int(defaults["weekly_unique_songs"]), step=1)
+        songs = row1[3].number_input("Weekly songs played", min_value=0, max_value=int(caps["weekly_songs_played"]), value=int(defaults["weekly_songs_played"]), step=1)
+        unique_songs = row1[4].number_input("Weekly unique songs", min_value=0, max_value=int(caps["weekly_unique_songs"]), value=int(defaults["weekly_unique_songs"]), step=1)
         row2 = st.columns(5)
-        favorites = row2[0].number_input("Favorite artists", min_value=0, max_value=500, value=int(defaults["num_favorite_artists"]), step=1)
-        friends = row2[1].number_input("Platform friends", min_value=0, max_value=500, value=int(defaults["num_platform_friends"]), step=1)
-        playlists = row2[2].number_input("Playlists created", min_value=0, max_value=500, value=int(defaults["num_playlists_created"]), step=1)
-        shared = row2[3].number_input("Shared playlists", min_value=0, max_value=500, value=int(defaults["num_shared_playlists"]), step=1)
-        notifications = row2[4].number_input("Notifications clicked", min_value=0, max_value=2000, value=int(defaults["notifications_clicked"]), step=1)
+        favorites = row2[0].number_input("Favorite artists", min_value=0, max_value=int(caps["num_favorite_artists"]), value=int(defaults["num_favorite_artists"]), step=1)
+        friends = row2[1].number_input("Platform friends", min_value=0, max_value=int(caps["num_platform_friends"]), value=int(defaults["num_platform_friends"]), step=1)
+        playlists = row2[2].number_input("Playlists created", min_value=0, max_value=int(caps["num_playlists_created"]), value=int(defaults["num_playlists_created"]), step=1)
+        shared = row2[3].number_input("Shared playlists", min_value=0, max_value=int(caps["num_shared_playlists"]), value=int(defaults["num_shared_playlists"]), step=1)
+        notifications = row2[4].number_input("Notifications clicked", min_value=0, max_value=int(caps["notifications_clicked"]), value=int(defaults["notifications_clicked"]), step=1)
         submitted = st.form_submit_button("이 고객의 위험 점수 계산", type="primary", width="stretch")
 
     if submitted:
@@ -375,8 +385,17 @@ def prediction_page(train: pd.DataFrame, model, metadata: dict):
         with r3: metric_card("Decision", "우선 검토" if probability >= threshold else "일반 모니터링", "자동 조치 아님")
         st.markdown('<div class="section-label">리텐션 검토 포인트</div>', unsafe_allow_html=True)
         actions = []
-        if payment_plan == "monthly": actions.append("월간 결제 고객: 연간 전환·가격/혜택 실험 후보로 분리")
-        if subscription_type in {"student", "premium"}: actions.append(f"{subscription_type} 고객: 요금제 혜택과 사용 맥락을 별도 세그먼트로 확인")
+        type_rates_all = train.groupby("subscription_type")["churned"].mean()
+        if float(type_rates_all.get(subscription_type, 0)) >= train["churned"].mean() * 1.2:
+            actions.append(f"{subscription_type} 요금제: 평균 대비 높은 이탈 세그먼트 — 전환·혜택 실험 후보")
+        try:
+            if float(pause_value) >= 3:
+                actions.append("구독 일시정지 3회 이상: 해지 전 행동 신호 — 우선 접촉 후보")
+        except (TypeError, ValueError):
+            pass
+        inquiry_rates = train.groupby("customer_service_inquiries")["churned"].mean()
+        if float(inquiry_rates.get(customer_service, 0)) >= train["churned"].mean() * 1.2:
+            actions.append("상담 문의 상위 구간: 불만 이슈 해결을 유지 활동 1순위로")
         if skip_rate >= train.song_skip_rate.quantile(.75): actions.append("높은 skip rate: 개인화 추천·탐색 경험의 추가 진단 후보")
         if weekly_hours <= train.weekly_hours.quantile(.25): actions.append("낮은 주간 청취: 재활성화 메시지·콘텐츠 추천 실험 후보")
         if not actions: actions.append("현재 입력만으로는 강한 단일 신호가 없으므로 전체 세그먼트 맥락과 함께 검토")
@@ -406,16 +425,13 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
     header("Campaign Simulator", "예산·인원·상위 % 중 원하는 기준으로 캠페인 규모를 정하면, 고객별 예측 확률 순위로 기대 효과를 계산합니다.")
     st.markdown(
         '<div class="note-card"><b>설계 원칙</b><br>접촉 비용·고객 가치·방어 성공률은 마케팅 담당자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
-        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음). '
-        '연간 결제 고객의 이탈은 본 모델이 탐지하지 못하므로 갱신일 기반 캠페인으로 별도 관리가 필요합니다.</div>',
+        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음).</div>',
         unsafe_allow_html=True,
     )
 
     base = predictions.merge(test[["customer_id", "subscription_type"]], on="customer_id", how="inner")
     base = base.rename(columns={"churn_probability": "prob", "subscription_type": "plan"})[["customer_id", "prob", "plan"]]
-    plan_order = ["student", "premium", "basic", "family premium"]
-    plan_list = [p for p in plan_order if p in set(base["plan"])]
-    plan_list += [p for p in sorted(set(base["plan"])) if p not in plan_list]
+    plan_list = base.groupby("plan")["prob"].mean().sort_values(ascending=False).index.tolist()
 
     ss = st.session_state
     ss.setdefault("sim_driver", "budget")
@@ -594,8 +610,6 @@ def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict
             note = f"{p} — 대상 {len(sub):,}명, 기대 이탈자 {sub['prob'].sum():,.0f}명, 현재 배정 {marker:,}명."
             if p not in included:
                 note += " (현재 산식에서 제외됨 — 곡선은 참고용)"
-            if p == "family premium":
-                note += " 주의: 이 그룹 이탈자 다수가 연간 결제(모델 사각지대)로 곡선이 낙관적일 수 있습니다."
             st.markdown(f'<div class="small-caption">{note}</div>', unsafe_allow_html=True)
 
 
