@@ -402,12 +402,209 @@ def batch_page(predictions: pd.DataFrame, metadata: dict):
     st.download_button("현재 필터 결과 CSV 다운로드", data=filtered.to_csv(index=False).encode("utf-8-sig"), file_name="playlistpro_churn_priorities.csv", mime="text/csv", width="stretch")
 
 
+def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict):
+    header("Campaign Simulator", "예산·인원·상위 % 중 원하는 기준으로 캠페인 규모를 정하면, 고객별 예측 확률 순위로 기대 효과를 계산합니다.")
+    st.markdown(
+        '<div class="note-card"><b>설계 원칙</b><br>접촉 비용·고객 가치·방어 성공률은 마케팅 담당자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
+        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음). '
+        '연간 결제 고객의 이탈은 본 모델이 탐지하지 못하므로 갱신일 기반 캠페인으로 별도 관리가 필요합니다.</div>',
+        unsafe_allow_html=True,
+    )
+
+    base = predictions.merge(test[["customer_id", "subscription_type"]], on="customer_id", how="inner")
+    base = base.rename(columns={"churn_probability": "prob", "subscription_type": "plan"})[["customer_id", "prob", "plan"]]
+    plan_order = ["student", "premium", "basic", "family premium"]
+    plan_list = [p for p in plan_order if p in set(base["plan"])]
+    plan_list += [p for p in sorted(set(base["plan"])) if p not in plan_list]
+
+    ss = st.session_state
+    ss.setdefault("sim_driver", "budget")
+    ss.setdefault("sim_budget", 5_000_000)
+    ss.setdefault("sim_count", 1666)
+    ss.setdefault("sim_pct", 16.7)
+
+    def _set_driver(name: str):
+        st.session_state["sim_driver"] = name
+
+    st.markdown('<div class="section-label">캠페인 규모</div>', unsafe_allow_html=True)
+    st.markdown('<div class="small-caption">셋 중 아무 값이나 수정하면 나머지 둘이 자동 환산됩니다.</div>', unsafe_allow_html=True)
+    scale_box = st.container()
+
+    def render_scale_inputs():
+        with scale_box:
+            a, b, c = st.columns(3)
+            a.number_input("캠페인 예산 (원)", min_value=0, step=500_000, key="sim_budget", on_change=_set_driver, args=("budget",))
+            b.number_input("연락 인원 (명)", min_value=0, step=50, key="sim_count", on_change=_set_driver, args=("count",))
+            c.number_input("상위 위험군 (%)", min_value=0.0, max_value=100.0, step=1.0, key="sim_pct", on_change=_set_driver, args=("pct",))
+
+    col_sr, col_sort = st.columns([1.4, 1])
+    with col_sr:
+        success_rate = st.slider("방어 성공률 (%)", 5, 50, 20, 5) / 100.0
+
+    kpi_box = st.container()
+
+    st.markdown('<div class="section-label">요금제별 설정</div>', unsafe_allow_html=True)
+    st.markdown('<div class="small-caption">\'포함\'을 끄면 해당 요금제는 산식(배정·퍼널·곡선)에서 제외됩니다. 기본값 동일 = 전역 가정과 같은 동작.</div>', unsafe_allow_html=True)
+    counts = base.groupby("plan")["prob"].agg(["size", "mean"])
+    cfg = st.data_editor(
+        pd.DataFrame(
+            {
+                "요금제": plan_list,
+                "보유 고객": [int(counts.loc[p, "size"]) for p in plan_list],
+                "평균 위험도": [f"{counts.loc[p, 'mean']:.1%}" for p in plan_list],
+                "포함": True,
+                "접촉 비용(원)": 3000,
+                "고객 가치(원/년)": 120000,
+            }
+        ),
+        hide_index=True,
+        disabled=["요금제", "보유 고객", "평균 위험도"],
+        column_config={
+            "포함": st.column_config.CheckboxColumn("포함"),
+            "접촉 비용(원)": st.column_config.NumberColumn("접촉 비용(원)", min_value=0, step=500),
+            "고객 가치(원/년)": st.column_config.NumberColumn("고객 가치(원/년)", min_value=0, step=10000),
+        },
+        width="stretch",
+    ).set_index("요금제")
+
+    included = [p for p in plan_list if bool(cfg.loc[p, "포함"])]
+    if not included:
+        render_scale_inputs()
+        st.warning("산식에 포함된 요금제가 없습니다. 하나 이상 선택해주세요.")
+        return
+
+    work = base[base["plan"].isin(included)].copy()
+    work["cost"] = work["plan"].map(cfg["접촉 비용(원)"].astype(float))
+    work["ltv"] = work["plan"].map(cfg["고객 가치(원/년)"].astype(float))
+    work["ev"] = work["prob"] * success_rate * work["ltv"] - work["cost"]
+    work = work.sort_values(["ev", "prob"], ascending=False).reset_index(drop=True)
+    pool = len(work)
+    cum_spend = work["cost"].cumsum().values
+
+    driver = ss["sim_driver"]
+    if driver == "budget":
+        n_sel = int((cum_spend <= float(ss["sim_budget"])).sum())
+    elif driver == "count":
+        n_sel = int(min(int(ss["sim_count"]), pool))
+    else:
+        n_sel = int(round(float(ss["sim_pct"]) / 100.0 * pool))
+    n_sel = max(0, min(n_sel, pool))
+
+    sel = work.iloc[:n_sel]
+    spend = float(sel["cost"].sum())
+    caught = float(sel["prob"].sum())
+    saved = caught * success_rate
+    revenue = float((sel["prob"] * success_rate * sel["ltv"]).sum())
+    net = revenue - spend
+
+    if driver != "budget":
+        ss["sim_budget"] = int(spend)
+    if driver != "count":
+        ss["sim_count"] = int(n_sel)
+    if driver != "pct":
+        ss["sim_pct"] = round(n_sel / pool * 100, 1) if pool else 0.0
+    render_scale_inputs()
+
+    counts_all = base.groupby("plan")["prob"].mean()
+    plan_result = []
+    for p in plan_list:
+        if p in included:
+            row_ev = float(counts_all.loc[p]) * success_rate * float(cfg.loc[p, "고객 가치(원/년)"]) - float(cfg.loc[p, "접촉 비용(원)"])
+            plan_result.append([p, f"{row_ev:,.0f}원", f"{int((sel['plan'] == p).sum()):,}명"])
+        else:
+            plan_result.append([p, "제외", "-"])
+    st.dataframe(pd.DataFrame(plan_result, columns=["요금제", "기대이익/인(평균 위험도 기준)", "연락 배정"]), hide_index=True, width="stretch")
+
+    uniform = cfg["접촉 비용(원)"].nunique() == 1 and cfg["고객 가치(원/년)"].nunique() == 1
+    sort_label = "이탈 확률 순 (요금제별 값 동일 → 기대이익 순과 일치)" if uniform else "기대이익 순 (요금제별 값 차등 반영)"
+    with col_sort:
+        st.markdown(f'<div class="note-card" style="margin-top:28px"><b>정렬 기준</b><br>{sort_label}</div>', unsafe_allow_html=True)
+
+    with kpi_box:
+        st.markdown(f'<div class="small-caption">대상 풀 {pool:,}명 · 기대 이탈자 {work["prob"].sum():,.0f}명</div>', unsafe_allow_html=True)
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: metric_card("집행액", f"{spend:,.0f}원", f"{n_sel:,}명 연락")
+        with k2: metric_card("기대 포착 이탈자", f"{caught:,.0f}명", f"방어 {saved:,.0f}명 (성공률 {success_rate:.0%})")
+        with k3: metric_card("연간 절감 기대액", f"{revenue:,.0f}원", "가치 가정 반영")
+        with k4: metric_card("순이익 · ROI", f"{net:,.0f}원", f"ROI {net / spend:.0%}" if spend > 0 else "-")
+
+    st.markdown('<div class="section-label">캠페인 퍼널</div>', unsafe_allow_html=True)
+    miss = max(n_sel - caught, 0.0)
+    stages = ["방어 성공", "기대 포착 이탈자", "연락 대상", "대상 고객(선택 요금제)"]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(y=stages, x=[0, 0, 0, pool], orientation="h", name="대상 고객", marker_color="#b4b2a9", showlegend=False))
+    fig.add_trace(go.Bar(y=stages, x=[0, caught, caught, 0], orientation="h", name="적중(진짜 이탈 예정)", marker_color="#d03b3b"))
+    fig.add_trace(go.Bar(y=stages, x=[0, 0, miss, 0], orientation="h", name="오경보", marker_color="#eda100"))
+    fig.add_trace(go.Bar(y=stages, x=[saved, 0, 0, 0], orientation="h", name="방어 성공", marker_color="#008300", showlegend=False))
+    fig.update_layout(barmode="stack", height=280, xaxis_range=[0, pool * 1.05], xaxis_title=None, yaxis_title=None)
+    st.plotly_chart(plotly_theme(fig), width="stretch")
+    if n_sel:
+        st.markdown(f'<div class="small-caption">연락 대상 {n_sel:,}명 중 기대 적중 {caught:,.0f}명 · 오경보 {n_sel - caught:,.0f}명 (정밀도 {caught / n_sel:.1%})</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-label">연락 범위별 순이익 곡선</div>', unsafe_allow_html=True)
+    curve_mode = st.radio("곡선 모드", ["현재 설정 기준", "단가 시나리오 비교"], horizontal=True)
+    scen_costs = []
+    if curve_mode == "단가 시나리오 비교":
+        s1, s2, s3 = st.columns(3)
+        scen_costs = [
+            s1.number_input("시나리오 단가 1 (원)", min_value=0, value=3000, step=500),
+            s2.number_input("시나리오 단가 2 (원)", min_value=0, value=6000, step=500),
+            s3.number_input("시나리오 단가 3 (원)", min_value=0, value=9000, step=500),
+        ]
+    scen_style = [("#2a78d6", None), ("#1baf7a", "dash"), ("#eb6834", "dot")]
+
+    def curve_arrays(sorted_df):
+        rev_c = (sorted_df["prob"].values * success_rate * sorted_df["ltv"].values).cumsum()
+        net_c = (rev_c - sorted_df["cost"].values.cumsum()) / 1e6
+        x = np.arange(1, len(sorted_df) + 1) / len(sorted_df) * 100
+        step = max(1, len(sorted_df) // 300)
+        idx = np.unique(np.concatenate([np.arange(0, len(sorted_df), step), [len(sorted_df) - 1]]))
+        return x[idx], net_c[idx], net_c
+
+    def group_figure(sub_df, group_pool, marker_n):
+        fig = go.Figure()
+        if scen_costs:
+            for c, (color, dash) in zip(scen_costs, scen_style):
+                tmp = sub_df.copy()
+                tmp["cost"] = float(c)
+                tmp["ev"] = tmp["prob"] * success_rate * tmp["ltv"] - tmp["cost"]
+                tmp = tmp.sort_values(["ev", "prob"], ascending=False)
+                x, y, _ = curve_arrays(tmp)
+                fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"단가 {c:,.0f}원", line=dict(color=color, dash=dash, width=3)))
+        else:
+            x, y, full_net = curve_arrays(sub_df)
+            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="순이익", line=dict(color="#2a78d6", width=3)))
+            if marker_n and marker_n > 0:
+                fig.add_trace(go.Scatter(x=[marker_n / group_pool * 100], y=[full_net[marker_n - 1]], mode="markers", name="현재 배정 위치", marker=dict(size=11, color="#2a78d6")))
+        fig.update_layout(height=340, xaxis_title="연락 범위 (그룹 내 상위 %)", yaxis_title="순이익 (백만원)")
+        return plotly_theme(fig)
+
+    tabs = st.tabs(["전체(선택)"] + plan_list)
+    with tabs[0]:
+        st.plotly_chart(group_figure(work, pool, n_sel), width="stretch")
+        st.markdown('<div class="small-caption">산식에 포함된 요금제 합계 기준 — 기대이익 순 배정.</div>', unsafe_allow_html=True)
+    for i, p in enumerate(plan_list, start=1):
+        with tabs[i]:
+            sub = base[base["plan"] == p].copy()
+            sub["cost"] = float(cfg.loc[p, "접촉 비용(원)"])
+            sub["ltv"] = float(cfg.loc[p, "고객 가치(원/년)"])
+            sub = sub.sort_values("prob", ascending=False).reset_index(drop=True)
+            marker = int((sel["plan"] == p).sum()) if p in included else 0
+            st.plotly_chart(group_figure(sub, len(sub), marker), width="stretch")
+            note = f"{p} — 대상 {len(sub):,}명, 기대 이탈자 {sub['prob'].sum():,.0f}명, 현재 배정 {marker:,}명."
+            if p not in included:
+                note += " (현재 산식에서 제외됨 — 곡선은 참고용)"
+            if p == "family premium":
+                note += " 주의: 이 그룹 이탈자 다수가 연간 결제(모델 사각지대)로 곡선이 낙관적일 수 있습니다."
+            st.markdown(f'<div class="small-caption">{note}</div>', unsafe_allow_html=True)
+
+
 def main():
     (train, test), model, (comparison, threshold, metadata, predictions, importance) = safe_load()
     with st.sidebar:
         st.markdown('<div class="brand"><span class="brand-mark">♫</span><span class="brand-name">PlaylistPro</span></div>', unsafe_allow_html=True)
         st.caption("Insight workspace")
-        page = st.radio("Workspace", ["Overview", "Data Explorer", "Model Lab", "Customer Scoring", "Batch Prioritization"], label_visibility="collapsed")
+        page = st.radio("Workspace", ["Overview", "Data Explorer", "Model Lab", "Customer Scoring", "Batch Prioritization", "Campaign Simulator"], label_visibility="collapsed")
         st.divider()
         st.markdown(f"**Model**  `{metadata['model']}`")
         st.markdown(f"**Threshold**  `{metadata['validation_threshold']:.2f}`")
@@ -421,8 +618,10 @@ def main():
         model_page(comparison, threshold, metadata, importance)
     elif page == "Customer Scoring":
         prediction_page(train, model, metadata)
-    else:
+    elif page == "Batch Prioritization":
         batch_page(predictions, metadata)
+    else:
+        simulator_page(test, predictions, metadata)
 
 
 if __name__ == "__main__":
