@@ -436,14 +436,15 @@ def improvement_page(progression: pd.DataFrame, candidate: dict, decision_matrix
     with c3:
         metric_card("순위 품질 변화", f"{candidate_pr_auc - raw_pr_auc:+.3f}", "저장된 평가 Run이 달라 방향성 참고")
 
-    progress_view = progression[["stage", "experiment", "model", "adopted", "pr_auc", "roc_auc", "f1", "recall", "precision", "fn", "fp"]].copy()
+    progress_view = progression[["experiment", "model", "adopted", "pr_auc", "roc_auc", "f1", "recall", "precision"]].copy()
+    progress_view.columns = ["실험", "모델", "결정", "PR-AUC", "ROC-AUC", "F1", "Recall", "Precision"]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=progress_view["experiment"], y=progress_view["pr_auc"], mode="lines+markers",
+        x=progress_view["실험"], y=progress_view["PR-AUC"], mode="lines+markers",
         marker_color="#E4573D", line_color="#E4573D", name="PR-AUC",
     ))
     fig.add_trace(go.Scatter(
-        x=progress_view["experiment"], y=progress_view["roc_auc"], mode="lines+markers",
+        x=progress_view["실험"], y=progress_view["ROC-AUC"], mode="lines+markers",
         marker_color="#315A7D", line_color="#315A7D", name="ROC-AUC",
     ))
     fig.update_layout(title="저장된 성능 개선 과정", xaxis_title=None, yaxis_title="점수", xaxis_tickangle=-28)
@@ -451,11 +452,11 @@ def improvement_page(progression: pd.DataFrame, candidate: dict, decision_matrix
 
     st.markdown('<div class="section-label">채택·제외 실험</div>', unsafe_allow_html=True)
     st.dataframe(
-        progress_view.style.format({metric: "{:.3f}" for metric in ["pr_auc", "roc_auc", "f1", "recall", "precision"]}),
+        progress_view.style.format({metric: "{:.3f}" for metric in ["PR-AUC", "ROC-AUC", "F1", "Recall", "Precision"]}),
         hide_index=True,
         width="stretch",
     )
-    st.caption("발표에서는 관찰 결과 → 가설/Feature·모델 변경 → 지표 변화 → 채택·제외 순서로 설명합니다. Feature Importance는 인과 설명이 아닙니다.")
+    st.caption("발표에서는 관찰 결과 → 가설/Feature·모델 변경 → 지표 변화 → 채택·제외 순서로 설명합니다. FN·FP는 동일 Threshold가 보장된 운영 시나리오에서만 비교합니다. Feature Importance는 인과 설명이 아닙니다.")
 
     if not decision_matrix.empty:
         st.markdown('<div class="section-label">저장된 후보 선정 근거</div>', unsafe_allow_html=True)
