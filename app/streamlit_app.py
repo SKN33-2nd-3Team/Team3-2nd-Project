@@ -149,7 +149,7 @@ def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFr
     with c3:
         metric_card("관찰 이탈률", f"{train['churned'].mean():.1%}", "churned=1")
     with c4:
-        metric_card("검증 후보", f"{len(comparison):,}개", "provisional 비교")
+        metric_card("비교 모델", f"{len(comparison):,}개", "최종 모델 선정 완료")
 
     st.markdown('<div class="section-label">핵심 신호</div>', unsafe_allow_html=True)
     a, b, c = st.columns(3)
@@ -255,13 +255,13 @@ def eda_page(train: pd.DataFrame):
 
 
 def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict, importance: pd.DataFrame):
-    header("Model Lab", "후보 모델 성능과 FN 우선 threshold trade-off를 확인합니다. 현재 추천은 provisional입니다.")
+    header("Model Lab", "후보 모델 성능과 FN 우선 threshold trade-off를 확인합니다. Gradient Boosting을 최종 모델로 선정했습니다.")
     best = comparison.iloc[0]
-    st.markdown(f'<div class="note-card"><b>현재 기술 추천: {best["model"]}</b><br>Validation expected cost 기준으로 선정된 임시 후보입니다. 비용비는 FN:FP={metadata.get("false_negative_cost", 3):g}:1이며, 실제 운영 threshold와 모델 채택은 승인 전입니다.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="note-card"><b>최종 선정 모델: {best["model"]}</b><br>Validation expected cost 기준으로 최종 선정했습니다. 비용비 FN:FP={metadata.get("false_negative_cost", 3):g}:1과 운영 threshold는 팀 가정이며 실제 사업 수치로 재검토해야 합니다.</div>', unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     with m1: metric_card("Test PR-AUC", f"{best['test_pr_auc']:.3f}", "ranking quality")
-    with m2: metric_card("Test Recall", f"{best['test_operating_recall']:.1%}", "provisional threshold")
-    with m3: metric_card("Test Precision", f"{best['test_operating_precision']:.1%}", "provisional threshold")
+    with m2: metric_card("Test Recall", f"{best['test_operating_recall']:.1%}", "operating threshold")
+    with m3: metric_card("Test Precision", f"{best['test_operating_precision']:.1%}", "operating threshold")
     with m4: metric_card("Threshold", f"{best['validation_operating_threshold']:.2f}", "Validation 선택값")
 
     left, right = st.columns([1.1, 1])
@@ -293,7 +293,7 @@ def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict
     fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["expected_cost_per_customer"], name="Expected cost/customer", line=dict(color="#8a6f2f", dash="dot")))
     fig.update_layout(title="Validation threshold curve", xaxis_title="Threshold", yaxis_title="Metric / cost", yaxis_range=[0, 1])
     st.plotly_chart(plotly_theme(fig), width="stretch")
-    st.markdown('<div class="small-caption">Threshold가 낮아지면 Recall은 보통 올라가지만 FP도 늘어납니다. 현재 비용비 3:1은 provisional이며, 운영 수용량과 실제 FN/FP 비용으로 재설정해야 합니다.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="small-caption">Threshold가 낮아지면 Recall은 보통 올라가지만 FP도 늘어납니다. 현재 비용비 3:1은 팀 가정이며, 운영 수용량과 실제 FN/FP 비용으로 재설정해야 합니다.</div>', unsafe_allow_html=True)
 
     with st.expander("모델 한계와 데이터 리스크"):
         st.markdown("""
@@ -307,7 +307,7 @@ def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict
 def prediction_page(train: pd.DataFrame, model, metadata: dict):
     header("Customer Scoring", "고객 정보를 입력하면 저장된 Pipeline이 이탈 위험 점수와 리텐션 확인 포인트를 반환합니다.")
     threshold = float(metadata["validation_threshold"])
-    st.markdown(f'<div class="note-card"><b>모델 실행 방식</b><br>저장된 `{metadata["model"]}` Pipeline만 로드합니다. 현재 threshold는 `{threshold:.2f}`이며 FN:FP 비용비 `{metadata.get("false_negative_cost", 3):g}:1` 기준의 provisional 값입니다.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="note-card"><b>모델 실행 방식</b><br>최종 선정된 `{metadata["model"]}` Pipeline만 로드합니다. 현재 threshold는 `{threshold:.2f}`이며 FN:FP 비용비 `{metadata.get("false_negative_cost", 3):g}:1` 기준의 팀 가정값입니다.</div>', unsafe_allow_html=True)
 
     with st.form("customer_form"):
         st.markdown('<div class="section-label">Subscription & profile</div>', unsafe_allow_html=True)

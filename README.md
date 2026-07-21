@@ -118,14 +118,14 @@ streamlit run app/streamlit_app.py
 - 수치형: median 대치, 로지스틱 회귀에만 표준화
 - 범주형: 최빈값 대치 후 `OneHotEncoder(handle_unknown="ignore")`
 - 파생 Feature: `signup_days_ago`, `unique_song_ratio`, `shared_playlist_ratio`, `hours_per_song`, `friends_per_playlist`
-- 분할을 먼저 수행하고 전처리기는 Train 또는 CV 학습 fold에만 `fit`
-- 데이터가 51:49로 균형이므로 SMOTE는 사용하지 않음
+- 분할을 먼저 수행하고 전처리기는 Train에만 `fit`
+- SMOTE는 사용하지 않았습니다. 최종 Gradient Boosting에는 Class Weight를 적용하지 않았지만 일부 비교 후보에는 balanced 계열 Class Weight를 적용했습니다.
 
 자세한 근거와 결과는 [전처리 결과서](reports/preprocessing_report.md), [Data Card](docs/data_card.md), [데이터 사전](docs/data_dictionary.md)에서 확인할 수 있습니다.
 
 ## 6. 모델 학습 및 평가
 
-모든 후보를 동일한 split과 지표로 비교했습니다. 모델과 임계값은 Validation에서 선택하고 Test는 마지막에 한 번 평가했습니다.
+모든 후보를 동일한 split과 지표로 비교했습니다. 각 후보의 임계값은 Validation에서 결정했으며, 고정된 임계값으로 각 모델을 Test에서 한 번씩 평가했습니다. Test 결과는 모델이나 임계값 선택에 사용하지 않았습니다.
 
 | 후보 | Val PR-AUC | Test PR-AUC | Test Recall* | Test Precision* |
 |---|---:|---:|---:|---:|
@@ -138,7 +138,7 @@ streamlit run app/streamlit_app.py
 
 <sub>*각 모델의 Validation 비용 최소 임계값을 Test에 고정 적용한 결과입니다.</sub>
 
-최종 모델의 운영 임계값은 `0.30`이며 Test 혼동행렬은 TN 8,435 / FP 3,730 / FN 492 / TP 12,343입니다. 모델 선정 근거, 하이퍼파라미터, 오류 분석은 [모델 학습 결과서](reports/training_report.md)와 [검증 계획서](docs/validation_plan.md)에 정리했습니다.
+최종 모델의 운영 임계값은 `0.30`이며 Test 혼동행렬은 TN 8,435 / FP 3,730 / FN 492 / TP 12,343입니다. 모델 선정 근거, 하이퍼파라미터, 현재 오류 현황은 [모델 학습 결과서](reports/training_report.md)와 [검증 계획서](docs/validation_plan.md)에 정리했습니다. FP·FN 사례 분석은 팀원 협의 후 추가할 예정입니다.
 
 딥러닝은 의도적으로 제외했습니다. 15개 파라미터의 가법 로지스틱 모델이 Test PR-AUC 0.9468로 최종 모델 0.9473과 사실상 동률이고, 합성 생성 규칙의 이론 상한에 이미 근접해 추가 복잡도의 근거가 없기 때문입니다.
 

@@ -10,6 +10,6 @@
 | [validation_plan.md](validation_plan.md) | 분할·평가·임계값 | 누수 방지, Train/Validation/Test, 모델 비교, threshold |
 | [submission_checklist.md](submission_checklist.md) | 필수 산출물 완료 기준 | 제출 파일, 실행 명령, 점검 상태 |
 | [../reports/preprocessing_report.md](../reports/preprocessing_report.md) | 데이터 전처리 결과서 | 품질 점검, EDA, 전처리, Feature, 한계 |
-| [../reports/training_report.md](../reports/training_report.md) | 인공지능 모델 학습 결과서 | 후보 모델, 비교표, 최종 Test, 오류 분석, 모델 저장 |
+| [../reports/training_report.md](../reports/training_report.md) | 인공지능 모델 학습 결과서 | 후보 모델, 비교표, 최종 Test, 오류 현황, 모델 저장 |
 
 문서 수치의 기준 파일은 `artifacts/model/metadata.json`, `artifacts/model_comparison.csv`, `artifacts/run_metadata.json`입니다.

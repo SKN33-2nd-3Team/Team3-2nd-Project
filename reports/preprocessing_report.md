@@ -87,7 +87,7 @@
 1. 원본 `train.csv`를 먼저 Train 60% / Validation 20% / Test 20%로 분리했습니다.
 2. `train_test_split(..., stratify=y, random_state=42)`를 두 번 적용했습니다.
 3. 피처 생성·결측 대치·인코딩·스케일링은 Pipeline 내부에서 Train에만 `fit`했습니다.
-4. Validation은 모델·임계값 선택에만, Test는 최종 평가에 한 번만 사용했습니다.
+4. Validation은 모델·임계값 선택에 사용했고, 각 후보 모델은 Validation에서 정한 임계값을 고정해 Test에서 한 번씩 평가했습니다. Test 결과는 모델·임계값 선택에 사용하지 않았습니다.
 5. Target, `customer_id`, 검증할 수 없는 원본 `signup_date`는 모델 입력에서 제외했습니다.
 6. 이탈 사유·해지일·사후 점수 컬럼이 원천 데이터에 없음을 확인했습니다.
 
@@ -126,7 +126,7 @@
 | 제거 행 | 0행 |
 | 모델 원천 입력 | `customer_id` 포함 19개 입력 컬럼; Pipeline 내부에서 ID·원본 날짜 제거 |
 | 변환 후 Feature | 49개 |
-| 불균형 처리 | 미적용, 양성 비율 51.34% |
+| 불균형 처리 | SMOTE는 사용하지 않았습니다. 최종 Gradient Boosting에는 Class Weight를 적용하지 않았지만 일부 비교 후보에는 balanced 계열 Class Weight를 적용했습니다. |
 | 저장 방식 | 전처리기+모델 통합 joblib Pipeline |
 
 생성 산출물은 `artifacts/eda_summary.json`, `artifacts/eda/`, `artifacts/eda_insight/`에 저장됩니다.

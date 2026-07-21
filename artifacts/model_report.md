@@ -2,8 +2,8 @@
 
 - Run time (UTC): `2026-07-21T08:47:51.867678+00:00`
 - Python: `3.12.13`
-- Recommended candidate (provisional): `gradient_boosting`
-- Threshold rule: `lowest Validation expected cost with FN:FP=3:1, then PR-AUC, then Recall; provisional and awaiting user approval`
+- Final selected model: `gradient_boosting`
+- Threshold rule: `lowest Validation expected cost with FN:FP=3:1, then PR-AUC, then Recall; final model selected`
 - Validation operating threshold: `0.30`
 
 ## Data and split
@@ -27,7 +27,7 @@
 
 ## Interpretation guardrails
 
-- The recommended candidate is not final approval; it is a technical provisional recommendation.
+- Gradient Boosting is the final selected model based on the documented Validation selection rule.
 - Metrics are for the dataset-provided `churned` label. They do not validate a future 30-day churn horizon.
-- The provisional threshold uses FN:FP=3:1; a high Recall operating point can still increase false positives, so the threshold and campaign capacity require business approval.
+- The operating threshold uses the team assumption FN:FP=3:1; a high Recall operating point can still increase false positives, so campaign capacity and the cost ratio require business review.
 - Feature importance and EDA relationships are associations, not causal churn drivers; see `artifacts/feature_importance.csv`.

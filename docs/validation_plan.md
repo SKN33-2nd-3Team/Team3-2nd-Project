@@ -9,7 +9,7 @@
 |---|---:|---:|---|
 | Train | 60% | 75,000 | 모델·전처리기 학습 |
 | Validation | 20% | 25,000 | 모델 선택, threshold 결정 |
-| Test | 20% | 25,000 | **최종 1회 평가만** |
+| Test | 20% | 25,000 | 후보별 고정 임계값으로 모델별 1회 평가 |
 
 - 방식: `train_test_split(..., stratify=y, random_state=42)` 2단계 (60/40 → 40을 20/20으로)
 - 근거: **고객 1명 = 1행**이므로 Group split이 불필요하다. 동일 고객 반복 기록이 없음을 `customer_id` 고유값 125,000 = 행 수로 확인했다.
@@ -27,7 +27,7 @@
 | 사후 정보 제외 | 이탈 사유·해지일·점수 컬럼이 데이터에 **없음**을 확인 |
 | Test로 모델·threshold 선택 금지 | threshold는 `choose_operating_threshold(y_val, val_prob)`로 **Validation에서만** 결정 |
 
-- SMOTE·class_weight 오버샘플링은 **사용하지 않는다**. 이탈률 51.3%로 균형 데이터이기 때문이다.
+- SMOTE는 사용하지 않았다. 최종 Gradient Boosting에는 Class Weight를 적용하지 않았지만 일부 비교 후보에는 balanced 계열 Class Weight를 적용했다.
 - ⚠️ 잔여 위험: `weekly_hours` 등 이용 지표가 이탈 **직전** 값이라면 사후 피처일 수 있다. 스냅샷 정의가 없어 검증 불가하며, 이를 §4의 한계로 명시한다.
 
 ## 3. 평가 지표

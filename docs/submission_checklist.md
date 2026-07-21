@@ -37,8 +37,8 @@
 - [x] 동일 조건 후보 모델 비교
 - [x] Precision·Recall·F1·ROC-AUC·PR-AUC
 - [x] Validation에서 임계값 결정
-- [x] 최종 Test 1회 평가와 Confusion Matrix
-- [x] FP·FN 오류 분석
+- [x] 후보 모델별 Test 1회 평가와 최종 모델 Confusion Matrix
+- [ ] FP·FN 사례 분석 — 팀원 협의 후 추가 예정
 - [x] Feature Importance 해석 주의
 - [x] 최종 모델 선정 근거
 - [x] 딥러닝 제외 근거

@@ -1,7 +1,7 @@
 """Light-mode EDA and churn modeling pipeline for try_4_music.
 
 The script never overwrites the source CSVs. It produces EDA plots, split/model
-metadata, comparison metrics, a provisional threshold, and an inference file
+metadata, comparison metrics, an operating threshold, and an inference file
 for the unlabeled provided test set.
 """
 
@@ -409,7 +409,7 @@ def fit_and_compare(train: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
     best_row = comparison.iloc[0]
     recommended_info = {
         "model": recommended_name,
-        "selection_rule": f"lowest Validation expected cost with FN:FP={FN_COST:g}:1, then PR-AUC, then Recall; provisional and awaiting user approval",
+        "selection_rule": f"lowest Validation expected cost with FN:FP={FN_COST:g}:1, then PR-AUC, then Recall; final model selected",
         "false_negative_cost": FN_COST,
         "false_positive_cost": FP_COST,
         "validation_threshold": float(best_row["validation_operating_threshold"]),
@@ -493,7 +493,7 @@ def write_model_report(comparison: pd.DataFrame, recommended_info: dict, train: 
         "",
         f"- Run time (UTC): `{datetime.now(timezone.utc).isoformat()}`",
         f"- Python: `{platform.python_version()}`",
-        f"- Recommended candidate (provisional): `{recommended_info['model']}`",
+        f"- Final selected model: `{recommended_info['model']}`",
         f"- Threshold rule: `{recommended_info['selection_rule']}`",
         f"- Validation operating threshold: `{recommended_info['validation_threshold']:.2f}`",
         "",
@@ -517,9 +517,9 @@ def write_model_report(comparison: pd.DataFrame, recommended_info: dict, train: 
         "",
         "## Interpretation guardrails",
         "",
-        "- The recommended candidate is not final approval; it is a technical provisional recommendation.",
+        "- Gradient Boosting is the final selected model based on the documented Validation selection rule.",
         "- Metrics are for the dataset-provided `churned` label. They do not validate a future 30-day churn horizon.",
-        f"- The provisional threshold uses FN:FP={FN_COST:g}:1; a high Recall operating point can still increase false positives, so the threshold and campaign capacity require business approval.",
+        f"- The operating threshold uses the team assumption FN:FP={FN_COST:g}:1; a high Recall operating point can still increase false positives, so campaign capacity and the cost ratio require business review.",
         "- Feature importance and EDA relationships are associations, not causal churn drivers; see `artifacts/feature_importance.csv`.",
     ]
     (ARTIFACT_DIR / "model_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
