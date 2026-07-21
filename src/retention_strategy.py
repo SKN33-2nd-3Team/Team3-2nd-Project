@@ -14,6 +14,7 @@ import pandas as pd
 
 
 EVIDENCE_LEVEL = "관찰 연관성 기반 가설 · 캠페인 효과 미검증"
+PLAN_ASSUMPTION_VERSION = 2
 
 # Presentation-planning assumptions, not observed PlaylistPro revenue or costs.
 # Revenue proxies use a public Korean music-plan benchmark excluding VAT;

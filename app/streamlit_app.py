@@ -22,11 +22,13 @@ if str(ROOT) not in sys.path:
 
 from src import retention_strategy as _retention_strategy  # noqa: E402
 
-# Streamlit reruns this file inside a long-lived Python process. When a helper
-# module gains a new public function, that process can still hold the older
-# module object even though the source file is current. Reload only for this
-# stale-module condition so hot-reload recovers without a manual server restart.
-if not hasattr(_retention_strategy, "plan_economic_assumptions"):
+# Streamlit reruns this file inside a long-lived Python process. Reload when
+# either the public planning function or the current economics defaults are
+# missing from the cached helper module, so source updates appear immediately.
+if (
+    not hasattr(_retention_strategy, "plan_economic_assumptions")
+    or getattr(_retention_strategy, "PLAN_ASSUMPTION_VERSION", 0) < 2
+):
     _retention_strategy = importlib.reload(_retention_strategy)
 
 build_strategy_queue = _retention_strategy.build_strategy_queue
