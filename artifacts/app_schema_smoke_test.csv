@@ -1,0 +1,7 @@
+﻿case,expected_behavior,actual_behavior,status,detail
+normal_schema,accepted,accepted,PASSED,prediction completed
+reordered_columns,accepted,accepted,PASSED,prediction completed
+unseen_category,accepted,accepted,PASSED,prediction completed
+extra_app_column,accepted,accepted,PASSED,prediction completed
+missing_required_numeric,rejected,rejected,PASSED,KeyError: 'weekly_hours'
+invalid_numeric_type,rejected,rejected,PASSED,TypeError: unsupported operand type(s) for /: 'str' and 'float'

@@ -1,7 +1,7 @@
 {
   "run_id": "20260721_full_fair_v1",
-  "status": "COMPLETED_LOCAL_APP_PROMOTED",
-  "last_checkpoint": "local_app_promotion",
+  "status": "COMPLETED_CANDIDATE_AWAITING_BUSINESS_REVIEW",
+  "last_checkpoint": "final_audit",
   "checkpoints": {
     "repository_and_data_audit": "PASSED",
     "fair_fold_assignment": "PASSED",
@@ -19,8 +19,8 @@
     "candidate_save_reload": "PASSED",
     "app_schema_smoke_test": "PASSED",
     "presentation_evidence": "PASSED",
-    "instructor_audit": "PASSED",
-    "setup": "RECOVERED"
+    "instructor_audit": "PASSED_WITH_EXTERNAL_HOLDOUT_LIMITATION",
+    "setup": "PASSED_AFTER_RESOLUTION"
   },
   "completed_models": [
     "catboost",
@@ -51,5 +51,7 @@
     "xgboost",
     "lightgbm"
   ],
-  "candidate_model": "catboost"
+  "candidate_model": "catboost",
+  "external_labeled_holdout": "NOT_AVAILABLE",
+  "retraining_performed_during_completion": false
 }
