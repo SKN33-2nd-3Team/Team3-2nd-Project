@@ -1,9 +1,0 @@
-model,status,reason,source_key
-DummyClassifier,VERIFIED,Existing committed comparison artifact available.,dummy_prior
-LogisticRegression,VERIFIED,Existing committed comparison artifact available.,logistic_raw
-DecisionTreeClassifier,VERIFIED,Existing committed comparison artifact available.,decision_tree
-RandomForestClassifier,VERIFIED,Existing committed comparison artifact available.,random_forest
-GradientBoostingClassifier,VERIFIED,Existing committed comparison artifact available.,gradient_boosting
-XGBoost,UNAVAILABLE,Package not installed; no dependency added in bounded run.,
-LightGBM,UNAVAILABLE,Package not installed; no dependency added in bounded run.,
-CatBoost,UNAVAILABLE,Package not installed; no dependency added in bounded run.,

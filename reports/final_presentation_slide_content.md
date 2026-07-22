@@ -505,8 +505,8 @@ Lift는 실제 유지 성공률이 아니다. 현재 라벨에서 위험 고객�
 - 저장 모델 SHA-256과 새 프로세스 재로딩 검증 완료
 
 ### 사용할 표 또는 그래프
-- 주 화면: `submission_package/PlaylistPro_final_submission_20260722/assets/screenshots/03_customer_priority.png`
-- 보조 화면: `submission_package/PlaylistPro_final_submission_20260722/assets/screenshots/04_campaign_planning.png`
+- 주 화면: `assets/screenshots/03_customer_priority.png`
+- 보조 화면: `assets/screenshots/04_campaign_planning.png`
 - 화면 위에 사용 흐름 4단계를 표시한다.
 
 ```text

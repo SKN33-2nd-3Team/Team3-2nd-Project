@@ -24,7 +24,7 @@
 - OOF Top-K/Lift: `artifacts/topk_lift_oof_catboost.csv`
 - OOF 위험 Decile: `artifacts/risk_decile_oof_catboost.csv`
 
-기존 Gradient Boosting 모델과 이전 CatBoost 통합본은 `artifacts/model/archive/` 아래에 서로 다른 폴더로 보존했습니다.
+기존 Gradient Boosting 모델과 이전 CatBoost 통합본은 최종 제출 정리 과정에서 제외했습니다. 현재 저장소의 권위 모델은 `artifacts/model/music_churn_pipeline.joblib`과 동일 SHA-256의 `models/churn_pipeline.joblib`입니다.
 
 ## 인사이트 통합
 

@@ -2,7 +2,7 @@
 
 > 대상: `data/train.csv` (125,000행 × 20열), `data/test.csv` (75,000행 × 19열, 라벨 없음)
 > 작성 기준: 프로젝트 가이드 §3 "EDA와 전처리 계획" 산출물 요건
-> 재현: `python scripts/eda_insight.py` (차트 7종 + 본 수치 전량)
+> 재현: `python scripts/legacy/eda_insight.py` (차트 7종 + 본 수치 전량)
 
 ---
 

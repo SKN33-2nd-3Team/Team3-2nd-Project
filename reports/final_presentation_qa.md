@@ -36,25 +36,25 @@ Accuracy는 특정 Threshold에서 전체 정답 비율을 보지만, 이 프로
 
 아닙니다. 중요도와 그룹별 이탈률은 모델 안에서의 예측 연관성을 뜻할 뿐 인과효과를 증명하지 않습니다. 예를 들어 Free 고객의 이탈률이 높아도 할인하면 이탈이 줄어든다고 바로 결론 낼 수 없습니다. 그래서 해당 변수는 행동 가설을 세우는 신호로만 사용하고, 실제 행동 효과는 A/B 테스트로 검증해야 합니다.
 
-- 근거: `reports/current_insight_inventory.md`, `docs/streamlit_insight_redesign_prompt.md`
+- 근거: `reports/current_insight_inventory.md`, `docs/requirements.md`
 
 ## 7. Recall과 Precision 중 무엇이 더 중요한가요?
 
 사업 비용에 따라 달라집니다. 놓친 이탈 고객의 비용이 크면 Recall과 낮은 FN을 우선하고, 상담 자원이 부족하거나 불필요한 접촉 비용이 크면 Precision과 낮은 FP를 우선합니다. 그래서 저희는 하나의 고정 Threshold를 정답으로 제시하지 않고 0.29, 0.35, 0.74 같은 운영 시나리오와 Top-K를 함께 제공합니다.
 
-- 근거: `artifacts/threshold_operating_scenarios.csv`
+- 근거: `artifacts/threshold_operating_scenarios_v2.csv`
 
 ## 8. 실제로 몇 퍼센트의 고객을 관리해야 하나요?
 
 현재 데이터만으로 한 비율을 정답이라고 정할 수는 없습니다. 예를 들어 Threshold 0.29는 62.16%를 검토해 Recall 95.18%를 확보하고, Top 10%는 1만 2,500명으로 전체 이탈자의 19.48%를 포착합니다. 실제 선택은 월간 상담 가능 인원, 접촉 비용, 놓침 비용을 입력한 뒤 해야 합니다.
 
-- 근거: `artifacts/threshold_operating_scenarios.csv`, `artifacts/topk_lift.csv`
+- 근거: `artifacts/threshold_operating_scenarios_v2.csv`, `artifacts/topk_lift_oof_catboost.csv`
 
 ## 9. 이 모델로 이탈률이 실제로 얼마나 줄어드나요?
 
 아직 답할 수 없습니다. 모델은 위험 순위를 평가했지만, 추천 행동을 실행한 실험 데이터가 없으므로 이탈 감소율이나 uplift는 증명되지 않았습니다. Lift 1.95도 캠페인 효과가 아니라 상위 고객군에 실제 이탈자가 무작위보다 1.95배 농축됐다는 의미입니다. 실제 감소율은 캠페인 대조군을 둔 A/B 테스트가 필요합니다.
 
-- 근거: `artifacts/topk_lift.csv`, `reports/presentation_evidence_pack_v3.md`
+- 근거: `artifacts/topk_lift_oof_catboost.csv`, `reports/presentation_evidence_pack_v3.md`
 
 ## 10. ‘30일 이탈 예측’ 모델인가요?
 
@@ -102,7 +102,7 @@ Gradient Boosting 탐색이 Baseline 대비 PR-AUC 0.000793 하락한 사례와,
 
 행동은 관찰된 신호를 운영자가 검토할 수 있는 가설로 번역했습니다. 높은 문의는 미해결 문의 확인, 낮은 청취는 재활성화, 높은 Skip은 콘텐츠 만족도, 높은 Pause는 복귀 장벽, Free는 혜택 인지 검토로 연결했습니다. 민감하거나 실행성이 낮은 Age·Location과 식별자인 ID는 행동 근거에서 제외했습니다. 효과가 증명된 처방이 아니라 검토 후보입니다.
 
-- 근거: `src/retention_strategy.py`, `docs/streamlit_insight_redesign_prompt.md`
+- 근거: `src/retention_strategy.py`, `docs/requirements.md`
 
 ## 18. 화면의 접촉비용과 고객가치는 실제 값인가요?
 
@@ -114,7 +114,7 @@ Gradient Boosting 탐색이 Baseline 대비 PR-AUC 0.000793 하락한 사례와,
 
 고객이 바꾸기 어려운 특성이고, 차별적 운영으로 오해될 가능성이 있으며, 관찰된 연관성이 있어도 실행 가능한 유지 행동으로 직접 연결하기 어렵기 때문입니다. 예측 모델 입력과 고객 접촉 근거는 별개로 관리해야 합니다. 현재 행동 규칙은 사용·문의·구독 상태처럼 담당자가 서비스 개선으로 대응할 수 있는 신호에 한정했습니다.
 
-- 근거: `src/retention_strategy.py`, `docs/streamlit_insight_redesign_prompt.md`
+- 근거: `src/retention_strategy.py`, `docs/requirements.md`
 
 ## 20. 이 프로젝트를 한 문장으로 설명하면 무엇인가요?
 

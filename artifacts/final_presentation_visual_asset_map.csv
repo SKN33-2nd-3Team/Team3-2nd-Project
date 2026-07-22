@@ -1,6 +1,6 @@
 asset_id,slide_no,purpose,status,asset_file,source_file,selection_reason,presentation_caption,caution
 V01,1,"프로젝트 가치 흐름","NATIVE_SPEC","","README.md; docs/requirements.md","첫 화면은 숫자보다 문제와 결과를 즉시 이해시켜야 함","고객 신호 → 위험 우선순위 → 행동 검토","PR-AUC를 첫 장 중심에 두지 않음"
-V02,2,"운영 의사결정 구조","NATIVE_SPEC","","docs/requirements.md; artifacts/threshold_operating_scenarios.csv","모델 지표와 운영 선택을 분리해 보여줌","Recall·Precision·검토 인원·행동 후보를 함께 선택","단일 정답 Threshold처럼 표현 금지"
+V02,2,"운영 의사결정 구조","NATIVE_SPEC","","docs/requirements.md; artifacts/threshold_operating_scenarios_v2.csv","모델 지표와 운영 선택을 분리해 보여줌","Recall·Precision·검토 인원·행동 후보를 함께 선택","단일 정답 Threshold처럼 표현 금지"
 V03,3,"데이터 규모와 검증 경계","NATIVE_SPEC","","docs/data_card.md; reports/source_repository_audit.md","학습·점수 산출·미검증 영역을 한 화면에서 구분","12.5만 학습·7.5만 점수 산출·외부 Holdout 없음","Test를 Holdout이라고 표기 금지"
 V04A,4,"주간 청취 시간 인사이트","MAIN","artifacts/eda_insight/02_weekly_hours_steps.png","artifacts/eda_insight/INSIGHT_REPORT.md","가장 강한 연속형 위험 신호를 직관적으로 표현","청취 활동이 낮은 구간에서 높은 관측 이탈률","인과관계로 해석 금지"
 V04B,4,"구독 유형과 문의 수준 인사이트","MAIN","figures/presentation_v3/20_categorical_churn_associations.png","artifacts/presentation_v3/20_categorical_churn_associations.csv","행동 가설과 직접 연결되는 범주형 차이를 보완","Free·높은 문의 그룹에서 높은 관측 이탈률","가격·문의가 원인이라고 단정 금지"
@@ -14,8 +14,8 @@ V09B,9,"상위 3개 Bootstrap 신뢰구간","SECONDARY","figures/presentation_v3
 V10,10,"Threshold별 Precision Recall F1","MAIN","figures/presentation_v3/10_threshold_precision_recall_f1.png","artifacts/presentation_v3/10_11_threshold_sweep.csv","운영 기준을 바꿀 때 지표 Trade-off를 보여줌","Threshold는 놓침과 과잉 검토를 조정한다","F1 최대점을 사업 최적점으로 단정 금지"
 V11A,11,"Top-K Capture와 Lift","MAIN","figures/presentation_v3/14_topk_capture_lift.png","artifacts/presentation_v3/14_topk_capture_lift.csv","검토 가능 인원과 포착률을 바로 연결","Top 10%에서 이탈자 19.48% 포착·Lift 1.95","Lift를 캠페인 uplift로 표현 금지"
 V11B,11,"Risk Decile","SECONDARY","figures/presentation_v3/15_risk_decile.png","artifacts/presentation_v3/15_risk_decile.csv","위험 점수 정렬의 농축 패턴을 보완","상위 위험 구간에 이탈자가 집중","실제 운영 효과로 표현 금지"
-V12A,12,"고객 우선순위 앱 화면","MAIN","submission_package/PlaylistPro_final_submission_20260722/assets/screenshots/03_customer_priority.png","app/streamlit_app.py","고객별 위험 신호·행동·운영 단계를 한 화면에서 보여줌","근거를 보고 채택·보류·직접 검토","CRM 자동 실행으로 표현 금지"
-V12B,12,"가정 기반 계획 화면","SECONDARY","submission_package/PlaylistPro_final_submission_20260722/assets/screenshots/04_campaign_planning.png","src/retention_strategy.py","구독별 계획 가정과 검토 규모 선택 기능을 보완","편집 가능한 접촉비용·고객가치 계획 가정","실제 LTV·ROI로 표현 금지"
+V12A,12,"고객 우선순위 앱 화면","MAIN","assets/screenshots/03_customer_priority.png","app/streamlit_app.py","고객별 위험 신호·행동·운영 단계를 한 화면에서 보여줌","근거를 보고 채택·보류·직접 검토","CRM 자동 실행으로 표현 금지"
+V12B,12,"가정 기반 계획 화면","SECONDARY","assets/screenshots/04_campaign_planning.png","src/retention_strategy.py","구독별 계획 가정과 검토 규모 선택 기능을 보완","편집 가능한 접촉비용·고객가치 계획 가정","실제 LTV·ROI로 표현 금지"
 V13,13,"현재 증거와 다음 검증","NATIVE_SPEC","","docs/data_card.md; reports/final_model_selection_decision.md","내부 검증·외부 Holdout·A/B 테스트를 계단형으로 구분","현재 OOF 검증 → 실제 시간 Holdout → 행동 A/B 테스트","현재 실제 효과가 입증됐다고 표현 금지"
 V14,14,"최종 의사결정 루프","NATIVE_SPEC","","reports/final_presentation_concept.md","프로젝트 전체를 한 문장과 흐름으로 회수","인사이트 → 모델 검증 → 운영 기준 → 행동 검토","모델 점수만 결론으로 제시 금지"
 Q01,9,"Seed 안정성 상세 질문","Q_AND_A","figures/presentation_v3/07_seed_stability.png","artifacts/presentation_v3/07_seed_stability.csv","Seed 평균과 표준편차 질문에 대응","CatBoost Seed 평균 0.947880·표준편차 0.000061","단일 Seed만 검증했다고 말하지 않음"

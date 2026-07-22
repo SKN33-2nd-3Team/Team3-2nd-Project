@@ -10,7 +10,7 @@
 | 데이터 전처리 결과서 | Markdown | [`reports/preprocessing_report.md`](../reports/preprocessing_report.md) | 완료 |
 | 인공지능 모델 학습 결과서 | Markdown | [`reports/training_report.md`](../reports/training_report.md) | 완료 |
 | 학습된 최종 모델 | joblib | `artifacts/model/music_churn_pipeline.joblib` | 완료 |
-| 모델 보조 파일 | JSON·CSV | `artifacts/model/metadata.json`, `artifacts/model_comparison.csv` | 완료 |
+| 모델 보조 파일 | JSON·CSV | `artifacts/model/metadata.json`, `artifacts/model_comparison_fair.csv` | 완료 |
 | Streamlit 시연 | Python | `app/streamlit_app.py` | 완료 |
 | README | Markdown | [`README.md`](../README.md) | 완료 |
 | 발표자료 | PDF | 저장소에 없음 | 제출 전 추가 필요 |
@@ -48,7 +48,9 @@
 
 ```bash
 pip install -r requirements.txt
-python -m src.run_pipeline
+python scripts/run_full_fair_comparison.py
+python scripts/finalize_full_fair_candidate.py
+python scripts/promote_full_fair_candidate.py
 streamlit run app/streamlit_app.py
 ```
 
