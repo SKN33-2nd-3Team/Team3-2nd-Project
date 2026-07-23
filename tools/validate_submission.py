@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.submission_hashing import canonical_file_info
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -81,8 +82,9 @@ def main() -> None:
     assert not forbidden, f"forbidden files in submission manifest: {forbidden}"
     for row in manifest["files"]:
         file_path = ROOT / row["path"]
-        assert file_path.stat().st_size == row["bytes"]
-        assert sha256(file_path) == row["sha256"]
+        size, digest = canonical_file_info(file_path)
+        assert size == row["bytes"]
+        assert digest == row["sha256"]
 
     result = {
         "status": "PASSED",

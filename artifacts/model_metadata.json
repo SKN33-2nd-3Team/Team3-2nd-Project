@@ -14,6 +14,15 @@
   "evaluation_limit": "독립된 외부 라벨 Holdout이 없어 모든 운영 지표는 5-Fold OOF 근거입니다.",
   "reload_verified": true,
   "fresh_process_reload_verified": true,
+  "package_versions": {
+    "python": "3.13.14",
+    "pandas": "2.3.3",
+    "numpy": "2.3.4",
+    "scikit-learn": "1.9.0",
+    "catboost": "1.2.10",
+    "joblib": "1.5.3"
+  },
+  "candidate_finalized_at_utc": "2026-07-21T18:21:24.001932+00:00",
   "artifact_sha256": "fc35ca91e9242dbc0e914db9f0dfc9e994024a5d4cc8d0d770d12321989a7d0e",
   "trusted_source_note": "저장소 내부 후보 경로와 메타데이터 SHA-256을 검증한 뒤 로드합니다.",
   "app_default_scenario_id": "balanced_f1",

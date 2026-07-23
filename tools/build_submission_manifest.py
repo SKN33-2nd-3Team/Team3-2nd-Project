@@ -1,14 +1,19 @@
 """Build the final PlaylistPro submission allowlist manifest."""
 from __future__ import annotations
 
-import hashlib
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.submission_hashing import canonical_file_info
 
 INCLUDE_FILES = {
-    "README.md", "requirements.txt", "models/churn_pipeline.joblib",
+    ".gitattributes", "README.md", "requirements.txt", "models/churn_pipeline.joblib",
+    "data/train.csv", "data/test.csv",
     "artifacts/feature_schema.json", "artifacts/model_metadata.json",
     "artifacts/metrics.csv", "artifacts/requirements_traceability.csv",
     "artifacts/model/music_churn_pipeline.joblib", "artifacts/model/metadata.json",
@@ -17,16 +22,21 @@ INCLUDE_FILES = {
     "reports/final_model_selection_decision.md", "reports/final_local_model_integration.md",
     "docs/data_card.md", "docs/data_dictionary.md",
     "docs/data_source.md", "docs/requirements.md", "docs/validation_plan.md",
+    "docs/submission_checklist.md",
     "docs/final_submission_checklist.md", "docs/human_confirmation_required.md",
     "docs/project_structure_audit.md",
     "tools/validate_submission.py", "tools/validate_streamlit.py",
     "tools/build_submission_manifest.py",
+    "tools/render_reports.py",
+    "tools/submission_hashing.py",
+    "experiments/submission_full_comparison/20260721_full_fair_v1/execution_plan.md",
+    "experiments/submission_full_comparison/20260721_full_fair_v1/run_config.json",
+    "experiments/submission_full_comparison/20260721_full_fair_v1/run_manifest.json",
 }
 
 INCLUDE_DIRS = {
-    "app", "assets/screenshots", "data", "notebooks", "figures/preprocessing",
+    "app", "assets/screenshots", "notebooks", "figures/preprocessing",
     "figures/training", "figures/presentation_v3", "artifacts/presentation_v3", "tests",
-    "experiments/submission_full_comparison/20260721_full_fair_v1",
 }
 
 FINAL_ARTIFACTS = {
@@ -45,20 +55,13 @@ FINAL_ARTIFACTS = {
 }
 
 FINAL_SCRIPTS = {
-    "scripts/build_full_oof_diagnostics.py", "scripts/finalize_full_fair_candidate.py",
+    "scripts/build_full_oof_diagnostics.py", "scripts/build_presentation_v3.py",
+    "scripts/finalize_full_fair_candidate.py",
     "scripts/promote_full_fair_candidate.py",
     "scripts/run_full_fair_comparison.py",
 }
 
 FINAL_SRC = {"src/features.py", "src/full_fair_features.py", "src/retention_strategy.py"}
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def included(path: Path) -> bool:
@@ -80,8 +83,14 @@ def main() -> None:
             continue
         if "prompt" in rel.lower():
             continue
-        files.append({"path": rel, "bytes": path.stat().st_size, "sha256": sha256(path)})
-    payload = {"package": "PlaylistPro_final_submission", "policy": "explicit_allowlist", "files": files}
+        size, digest = canonical_file_info(path)
+        files.append({"path": rel, "bytes": size, "sha256": digest})
+    payload = {
+        "package": "PlaylistPro_final_submission",
+        "policy": "explicit_allowlist",
+        "text_hash_normalization": "CRLF_to_LF",
+        "files": files,
+    }
     (ROOT / "submission_manifest.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

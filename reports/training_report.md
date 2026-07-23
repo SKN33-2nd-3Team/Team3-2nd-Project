@@ -48,7 +48,7 @@ MLP·딥러닝은 일반 정형 합성 데이터에서 발표 가치 대비 비�
 
 ## 4. 전처리 기반 성능 개선
 
-Raw Logistic OOF PR-AUC 0.899495에서 `log_numeric` Logistic 0.906293으로 +0.006798 개선했습니다. 비율 Feature와 signal-pruned 변형은 개선하지 못해 제외했습니다. Tree 검증에서 `log_numeric`의 Raw 대비 차이는 +0.000089로 작으므로, 공통 Feature의 일관성을 위한 선택이지 전체 성능 향상의 유일 원인으로 주장하지 않습니다.
+Raw Logistic OOF PR-AUC 0.899495에서 비율 Feature와 로그 변환을 결합한 `log_numeric` Logistic 0.906293으로 +0.006798 개선했습니다. 비율만 추가한 단독 변형과 signal-pruned 변형은 개선하지 못해 제외했습니다. 최종 `log_numeric` Pipeline에는 네 가지 완화 비율과 로그 변환이 함께 남아 있습니다. Tree 검증에서 `log_numeric`의 Raw 대비 차이는 +0.000089로 작으므로, 공통 Feature의 일관성을 위한 선택이지 전체 성능 향상의 유일 원인으로 주장하지 않습니다.
 
 ![성능 진행](../figures/training/01_performance_progression.png)
 
@@ -169,7 +169,7 @@ Premium·Family의 Recall이 낮아 일률적인 전체 지표만으로 운영�
 
 ![Feature Importance](../figures/training/17_final_feature_importance.png)
 
-Feature Importance는 모델이 예측에 사용한 정도이며 이탈의 인과 원인이 아닙니다. 나이·지역은 행동 배정 근거에서 제외하고, 문의·청취시간·스킵·일시정지·구독 유형만 투명한 유지 전략 규칙에 사용합니다.
+Feature Importance는 모델이 예측에 사용한 정도이며 이탈의 인과 원인이 아닙니다. 나이·지역은 직접 행동 신호에서 제외하고 문의·청취시간·스킵·일시정지·구독 유형만 투명한 유지 전략 규칙에 사용합니다. 다만 나이·지역은 예측 모델 입력이므로 위험 점수와 캠페인 단계에 간접 영향을 줄 수 있으며, 운영 적용 전 공정성 검토가 필요합니다.
 
 ## 12. 저장 모델과 재현성
 

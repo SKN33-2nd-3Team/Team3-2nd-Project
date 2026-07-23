@@ -191,7 +191,7 @@ Team3-2nd-Project/
 └── submission_manifest.json
 ```
 
-`src/legacy/run_holdout_pipeline.py`는 초기 Holdout·Gradient Boosting 실험을 보존한 레거시 코드입니다. 최종 CatBoost 학습 계보는 `scripts/run_full_fair_comparison.py` → `scripts/build_full_oof_diagnostics.py` → `scripts/finalize_full_fair_candidate.py` → `scripts/promote_full_fair_candidate.py`입니다.
+`src/legacy/run_holdout_pipeline.py`는 초기 Holdout·Gradient Boosting 실험을 보존한 레거시 코드입니다. 최종 CatBoost 학습 계보는 `scripts/run_full_fair_comparison.py` → `scripts/build_full_oof_diagnostics.py` → `scripts/finalize_full_fair_candidate.py` → `scripts/promote_full_fair_candidate.py`이며, 이후 `scripts/build_presentation_v3.py`와 `tools/render_reports.py`로 그림·PDF를 동기화합니다.
 
 ## 9. 기술 스택
 
@@ -216,9 +216,12 @@ streamlit run app/streamlit_app.py
 ```bash
 python -m pytest -q
 python tools/validate_submission.py
+python tools/validate_streamlit.py
 ```
 
 앱은 모델을 다시 학습하지 않습니다. 운영 모델 `artifacts/model/music_churn_pipeline.joblib`과 `artifacts/model/metadata.json`의 SHA-256이 다르면 로드를 중단합니다. `models/churn_pipeline.joblib`은 동일 SHA-256을 가진 제출용 alias입니다.
+
+전체 모델 비교를 새로 재현할 때는 `python scripts/run_full_fair_comparison.py --fresh-run`으로 시작합니다. OOF 배열, 비선정 후보 모델, Fold NPZ와 Fold 배정 CSV는 재생성 가능한 로컬 중간 산출물이라 Git에 저장하지 않습니다. 학습이 끝나면 diagnostics → finalize → promote → presentation figures → report PDFs 순서로 최종 모델과 집계·문서 산출물을 갱신한 뒤 Manifest를 다시 만들고 전체 검증을 실행합니다. 정확한 실행 순서는 [제출 체크리스트](docs/submission_checklist.md)를 따릅니다.
 
 ## 11. 수행 화면과 제출 문서
 

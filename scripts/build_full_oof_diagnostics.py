@@ -15,16 +15,16 @@ def metric(y,p,t=.5):
  z=(p>=t).astype(int); tn,fp,fn,tp=confusion_matrix(y,z,labels=[0,1]).ravel(); return dict(pr_auc=average_precision_score(y,p),roc_auc=roc_auc_score(y,p),f1=f1_score(y,z),recall=recall_score(y,z),precision=precision_score(y,z),fn=int(fn),fp=int(fp),tn=int(tn),tp=int(tp))
 def main():
  d=pd.read_csv(ROOT/"data"/"train.csv"); y=d.churned.to_numpy(); rng=np.random.default_rng(2026); probs={n:np.load(RUN/f"oof_fine_{n}.npy") for n in TOP}
- # Bootstrap point and paired PR-AUC differences.
+ # Bootstrap point and paired PR-AUC differences. Always regenerate this
+ # evidence from the current OOF predictions.
  boot_path=ART/"bootstrap_confidence_intervals.csv"
- if not boot_path.exists():
-  rows=[]; idx=np.arange(len(y))
-  for n,p in probs.items():
-   values=[]
-   for _ in range(1000):
-    s=rng.choice(idx,len(idx),replace=True); values.append([average_precision_score(y[s],p[s]),roc_auc_score(y[s],p[s])])
-   a=np.array(values); rows += [{"model":n,"metric":"pr_auc","estimate":metric(y,p)["pr_auc"],"ci_low":np.quantile(a[:,0],.025),"ci_high":np.quantile(a[:,0],.975),"resamples":1000},{"model":n,"metric":"roc_auc","estimate":metric(y,p)["roc_auc"],"ci_low":np.quantile(a[:,1],.025),"ci_high":np.quantile(a[:,1],.975),"resamples":1000}]
-  pd.DataFrame(rows).to_csv(boot_path,index=False,encoding="utf-8-sig")
+ rows=[]; idx=np.arange(len(y))
+ for n,p in probs.items():
+  values=[]
+  for _ in range(1000):
+   s=rng.choice(idx,len(idx),replace=True); values.append([average_precision_score(y[s],p[s]),roc_auc_score(y[s],p[s])])
+  a=np.array(values); rows += [{"model":n,"metric":"pr_auc","estimate":metric(y,p)["pr_auc"],"ci_low":np.quantile(a[:,0],.025),"ci_high":np.quantile(a[:,0],.975),"resamples":1000},{"model":n,"metric":"roc_auc","estimate":metric(y,p)["roc_auc"],"ci_low":np.quantile(a[:,1],.025),"ci_high":np.quantile(a[:,1],.975),"resamples":1000}]
+ pd.DataFrame(rows).to_csv(boot_path,index=False,encoding="utf-8-sig")
  # Calibration and risk deciles.
  cal=[]; dec=[]
  for n,p in probs.items():
@@ -46,6 +46,8 @@ def main():
  pd.DataFrame(scenarios).to_csv(ART/"threshold_operating_scenarios_v2.csv",index=False,encoding="utf-8-sig"); pd.DataFrame(contact).to_csv(ART/"equal_contact_comparison.csv",index=False,encoding="utf-8-sig"); pd.DataFrame(recall_rows).to_csv(ART/"equal_recall_comparison.csv",index=False,encoding="utf-8-sig"); pd.DataFrame(contact).to_csv(ART/"topk_lift_v2.csv",index=False,encoding="utf-8-sig")
  # Final candidate: highest fine-tuned CV PR-AUC; no external holdout claimed.
  fine=pd.read_csv(ART/"top3_fine_tuning_summary.csv").sort_values("best_cv_pr_auc",ascending=False); final=str(fine.iloc[0].model); final_p=probs[final]
+ if final != "catboost":
+  raise RuntimeError(f"Fine-tuned CV winner changed to {final}; review CatBoost-specific reports and promotion policy before publishing.")
  seg=[]
  for col in ["subscription_type","customer_service_inquiries"]:
   for value,ix in d.groupby(col).groups.items():

@@ -1,6 +1,7 @@
+import numpy as np
 import pandas as pd
 
-from app.streamlit_app import _prepare_campaign_plan
+from app.streamlit_app import _campaign_net_curve, _prepare_campaign_plan
 
 
 def _planning_inputs():
@@ -40,3 +41,14 @@ def test_action_portfolio_spreads_first_round_across_action_routes():
     assert len(first_round) == 3
     assert first_round["primary_action"].nunique() == 3
     assert result.iloc[-1]["customer_id"] == 2
+
+
+def test_campaign_net_curve_handles_an_empty_plan():
+    empty = pd.DataFrame(columns=["probability", "customer_value", "cost"])
+
+    x, y = _campaign_net_curve(empty, success_rate=0.10)
+
+    assert isinstance(x, np.ndarray)
+    assert isinstance(y, np.ndarray)
+    assert x.size == 0
+    assert y.size == 0

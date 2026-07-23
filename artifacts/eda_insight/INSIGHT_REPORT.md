@@ -3,6 +3,7 @@
 > 대상: `data/train.csv` (125,000행 × 20열), `data/test.csv` (75,000행 × 19열, 라벨 없음)
 > 작성 기준: 프로젝트 가이드 §3 "EDA와 전처리 계획" 산출물 요건
 > 재현: `python scripts/legacy/eda_insight.py` (차트 7종 + 본 수치 전량)
+> 범위: 아래 60/20/20 평가는 초기 P0 탐색 기록입니다. 최종 모델 선택과 운영 지표는 고정 Stratified 5-Fold OOF 근거를 사용합니다.
 
 ---
 
@@ -208,7 +209,7 @@ T2가 **이탈자의 45%를 담고 있으면서 고객의 31%뿐**이라 비용 
 | **2** | **연속형 4종을 구간 더미로 인코딩** | 전부 계단형이므로 선형·트리 분할 모두 낭비. `weekly_hours`[5/10/40], `age`[25/35/61], `song_skip_rate`[0.7], `notifications_clicked`[5], `num_subscription_pauses`[3] | 파생 피처(`unique_song_ratio` 등 4종)는 전부 노이즈 조합이므로 **제거**. 현재 `MusicFeatureEngineer`의 비율 피처 4개는 근거가 없다 |
 | **3** | **최종 모델을 GB → 로지스틱 회귀로 교체 검토** | 15파라미터로 동등 성능(0.9468 vs 0.9473). 계수가 곧 설명이고, joblib 용량·추론속도·SHAP 불필요 | 발표에서 "가장 단순한 모델이 최고 성능과 동률"이 오히려 강한 메시지. GB는 비교표에 남겨 선정 근거로 활용 |
 
-**유지할 결정(현행 유지):** 60/20/20 stratified split, threshold를 Validation에서만 결정, Pipeline 통합 저장 — 가이드 §4·§7 요건을 이미 충족한다. 이탈률 51.3%이므로 **SMOTE·class_weight는 불필요**하다.
+**초기 P0 결정 기록:** 60/20/20 stratified split과 Validation threshold를 사용했습니다. 최종 제출 모델은 동일 Train의 고정 Stratified 5-Fold OOF로 비교·선정하며, 라벨 없는 Test는 최종 예측 생성에만 사용합니다. Pipeline 통합 저장과 이탈률 51.3%에 따른 불균형 처리 제외 판단은 유지합니다.
 
 ---
 

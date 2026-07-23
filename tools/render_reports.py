@@ -9,6 +9,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
@@ -25,40 +26,59 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "reports"
-FONT_DIR = Path("C:/Windows/Fonts")
+FONT_REGULAR = "Malgun"
+FONT_BOLD = "Malgun-Bold"
 
 
 def register_fonts() -> None:
-    regular = FONT_DIR / "malgun.ttf"
-    bold = FONT_DIR / "malgunbd.ttf"
-    if not regular.exists() or not bold.exists():
-        raise FileNotFoundError("Malgun Gothic fonts are required for Korean PDF rendering")
-    pdfmetrics.registerFont(TTFont("Malgun", regular))
-    pdfmetrics.registerFont(TTFont("Malgun-Bold", bold))
+    global FONT_REGULAR, FONT_BOLD
+    candidates = [
+        (Path("C:/Windows/Fonts/malgun.ttf"), Path("C:/Windows/Fonts/malgunbd.ttf")),
+        (
+            Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
+            Path("/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf"),
+        ),
+        (
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"),
+        ),
+    ]
+    for regular, bold in candidates:
+        if regular.exists() and bold.exists():
+            pdfmetrics.registerFont(TTFont(FONT_REGULAR, regular))
+            pdfmetrics.registerFont(TTFont(FONT_BOLD, bold))
+            return
+
+    # ReportLab provides Korean CID fonts even when the host has no Korean TTF.
+    FONT_REGULAR = "HYSMyeongJo-Medium"
+    FONT_BOLD = "HYGoThic-Medium"
+    pdfmetrics.registerFont(UnicodeCIDFont(FONT_REGULAR))
+    pdfmetrics.registerFont(UnicodeCIDFont(FONT_BOLD))
 
 
 def clean_inline(text: str) -> str:
+    text = text.replace("<br>", "<br/>")
     text = re.sub(r"!\[([^]]*)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"\[([^]]+)\]\(([^)]+)\)", r'<link href="\2" color="#315d78">\1</link>', text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"`([^`]+)`", r'<font name="Malgun">\1</font>', text)
+    text = re.sub(r"`([^`]+)`", rf'<font name="{FONT_REGULAR}">\1</font>', text)
     return text.replace("&", "&amp;").replace("&amp;lt;", "&lt;").replace("&amp;gt;", "&gt;")
 
 
 def styles():
     base = getSampleStyleSheet()
     return {
-        "title": ParagraphStyle("TitleKR", parent=base["Title"], fontName="Malgun-Bold", fontSize=24, leading=32, textColor=colors.HexColor("#18324a"), spaceAfter=15),
-        "h1": ParagraphStyle("H1KR", parent=base["Heading1"], fontName="Malgun-Bold", fontSize=17, leading=23, textColor=colors.HexColor("#18324a"), spaceBefore=13, spaceAfter=8),
-        "h2": ParagraphStyle("H2KR", parent=base["Heading2"], fontName="Malgun-Bold", fontSize=13, leading=19, textColor=colors.HexColor("#315d78"), spaceBefore=10, spaceAfter=6),
-        "h3": ParagraphStyle("H3KR", parent=base["Heading3"], fontName="Malgun-Bold", fontSize=11, leading=16, textColor=colors.HexColor("#e4573d"), spaceBefore=8, spaceAfter=5),
-        "body": ParagraphStyle("BodyKR", parent=base["BodyText"], fontName="Malgun", fontSize=9.3, leading=15, textColor=colors.HexColor("#263442"), spaceAfter=6),
-        "bullet": ParagraphStyle("BulletKR", parent=base["BodyText"], fontName="Malgun", fontSize=9, leading=14, leftIndent=12, firstLineIndent=-8, bulletIndent=3, spaceAfter=3),
-        "quote": ParagraphStyle("QuoteKR", parent=base["BodyText"], fontName="Malgun", fontSize=9, leading=14, leftIndent=12, rightIndent=12, borderColor=colors.HexColor("#e8a23a"), borderWidth=1, borderPadding=7, backColor=colors.HexColor("#fff9ec"), spaceAfter=8),
+        "title": ParagraphStyle("TitleKR", parent=base["Title"], fontName=FONT_BOLD, fontSize=24, leading=32, textColor=colors.HexColor("#18324a"), spaceAfter=15),
+        "h1": ParagraphStyle("H1KR", parent=base["Heading1"], fontName=FONT_BOLD, fontSize=17, leading=23, textColor=colors.HexColor("#18324a"), spaceBefore=13, spaceAfter=8),
+        "h2": ParagraphStyle("H2KR", parent=base["Heading2"], fontName=FONT_BOLD, fontSize=13, leading=19, textColor=colors.HexColor("#315d78"), spaceBefore=10, spaceAfter=6),
+        "h3": ParagraphStyle("H3KR", parent=base["Heading3"], fontName=FONT_BOLD, fontSize=11, leading=16, textColor=colors.HexColor("#e4573d"), spaceBefore=8, spaceAfter=5),
+        "body": ParagraphStyle("BodyKR", parent=base["BodyText"], fontName=FONT_REGULAR, fontSize=9.3, leading=15, textColor=colors.HexColor("#263442"), spaceAfter=6),
+        "bullet": ParagraphStyle("BulletKR", parent=base["BodyText"], fontName=FONT_REGULAR, fontSize=9, leading=14, leftIndent=12, firstLineIndent=-8, bulletIndent=3, spaceAfter=3),
+        "quote": ParagraphStyle("QuoteKR", parent=base["BodyText"], fontName=FONT_REGULAR, fontSize=9, leading=14, leftIndent=12, rightIndent=12, borderColor=colors.HexColor("#e8a23a"), borderWidth=1, borderPadding=7, backColor=colors.HexColor("#fff9ec"), spaceAfter=8),
         "code": ParagraphStyle("CodeKR", parent=base["Code"], fontName="Courier", fontSize=7.5, leading=10, leftIndent=8, backColor=colors.HexColor("#f4f6f8"), borderPadding=6, spaceAfter=6),
-        "caption": ParagraphStyle("CaptionKR", parent=base["BodyText"], fontName="Malgun", fontSize=7.5, leading=11, textColor=colors.HexColor("#64748b"), alignment=TA_CENTER, spaceAfter=7),
-        "table": ParagraphStyle("TableKR", parent=base["BodyText"], fontName="Malgun", fontSize=6.8, leading=9, alignment=TA_LEFT),
-        "table_header": ParagraphStyle("TableHeaderKR", parent=base["BodyText"], fontName="Malgun-Bold", fontSize=6.8, leading=9, textColor=colors.white, alignment=TA_CENTER),
+        "caption": ParagraphStyle("CaptionKR", parent=base["BodyText"], fontName=FONT_REGULAR, fontSize=7.5, leading=11, textColor=colors.HexColor("#64748b"), alignment=TA_CENTER, spaceAfter=7),
+        "table": ParagraphStyle("TableKR", parent=base["BodyText"], fontName=FONT_REGULAR, fontSize=6.8, leading=9, alignment=TA_LEFT),
+        "table_header": ParagraphStyle("TableHeaderKR", parent=base["BodyText"], fontName=FONT_BOLD, fontSize=6.8, leading=9, textColor=colors.white, alignment=TA_CENTER),
     }
 
 
@@ -89,7 +109,7 @@ def parse_table(lines: list[str], sty: dict) -> Table:
 
 def header_footer(canvas, doc) -> None:
     canvas.saveState()
-    canvas.setFont("Malgun", 7.5)
+    canvas.setFont(FONT_REGULAR, 7.5)
     canvas.setFillColor(colors.HexColor("#64748b"))
     canvas.drawString(16 * mm, 9 * mm, "PlaylistPro 제출용 결과서")
     canvas.drawRightString(A4[0] - 16 * mm, 9 * mm, f"{doc.page}")

@@ -25,7 +25,7 @@
 - [ ] 신규 발표자료 PPTX·PDF·발표자 노트 반영 및 검증
 - [x] 제출 폴더 파일 Manifest·SHA-256 생성
 - [ ] 신규 발표자료 반영 후 제출 ZIP 생성·무결성 검사
-- [x] GitHub Push 미수행
+- [ ] GitHub PR 브랜치 Push 및 CI 검증
 
 ## 제출 담당자가 직접 확인
 

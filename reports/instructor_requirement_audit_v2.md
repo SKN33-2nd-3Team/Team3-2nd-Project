@@ -10,7 +10,7 @@
 | 변경 전후 ROC-AUC·PR-AUC·F1·Recall·Precision·FN·FP | `preprocessing_experiment_results.csv`, `model_comparison_fair.csv`, `random_search_summary.csv`, `top3_fine_tuning_summary.csv` | 각 주요 실험 단계에 공통 지표 저장 | 충족 | 없음 | 아니오 |
 | 직전 실험 대비·최초 Baseline 대비 변화 | `01_performance_progression.csv`, `02_preprocessing_experiments.csv`, `05_seven_model_search_before_after.csv` | 순차 변화와 Raw 대비 delta 기록 | 충족 | 없음 | 아니오 |
 | 제외 실험 최소 1개 | `03_adopted_rejected_experiments.csv` | log_numeric 외 raw, ratio, interaction, signal-pruned 실험 제외 사유 기록 | 충족 | 없음 | 아니오 |
-| 8개 모델 동일 조건 비교 | `model_comparison_fair.csv`, 저장된 `cv_fold_assignments.csv` | 동일 `log_numeric` 특성과 동일 5-fold로 Dummy 포함 8개 비교 | 충족 | 없음 | 아니오 |
+| 8개 모델 동일 조건 비교 | `model_comparison_fair.csv`, `run_config.json`, 재생성 가능한 Fold 산출물 | 동일 `log_numeric` 특성과 고정 Stratified 5-Fold로 Dummy 포함 8개 비교 | 충족 | 없음 | 아니오 |
 | 모델별 튜닝 전후 비교 | `05_seven_model_search_before_after.csv` | 7개 학습 모델의 Baseline과 RandomizedSearch 결과 연결 | 충족 | 없음 | 아니오 |
 | 실제 Top 3 정밀 튜닝 | `top3_selection_matrix.csv`, `top3_fine_tuning_summary.csv` | CatBoost·XGBoost·LightGBM 각 15회 정밀 탐색 | 충족 | 없음 | 아니오 |
 | Threshold 운영 시나리오 | `threshold_operating_scenarios_v2.csv`, 발표 그래프 10·11 | Recall-first, balanced F1, precision-first와 전체 sweep | 충족 | 운영 정책 미선택 | 사용자 결정 |

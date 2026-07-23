@@ -427,7 +427,13 @@ def improvement_page(tables: dict) -> None:
         st.write("")
         card("가설과 결과", f"로그 변환이 순서 신호를 보존하며 분포를 완화할 것으로 가정했습니다. PR-AUC는 <b>{raw_pr:.4f} → {prep['pr_auc'].max():.4f}</b>로 개선됐습니다.", "info-card", "02 TEST")
         st.write("")
-        card("결정", "log_numeric만 공통 Feature로 채택하고, 개선이 없던 비율·상호작용·신호 축소안은 제외했습니다.", "white-card", "03 DECIDE")
+        card(
+            "결정",
+            "로그와 비율 Feature를 결합한 log_numeric을 공통 Feature로 채택했습니다. "
+            "단독 비율 variant와 상호작용·신호 축소안은 추가 개선이 없어 제외했습니다.",
+            "white-card",
+            "03 DECIDE",
+        )
 
     st.markdown('<div class="section-label">동일 조건 8개 모델과 탐색 전후</div>', unsafe_allow_html=True)
     comparison = tables["comparison"].copy()
@@ -623,7 +629,8 @@ def strategy_review_panel(record: dict, probability: float, tables: dict, scenar
             '<div class="action-card alt"><div class="action-rank" style="color:#315d78">대안 행동 후보</div>'
             f'<div class="action-title">{html.escape(str(strategy["alternative_action"]))}</div>'
             f'<div class="action-row"><b>관찰 신호</b> · {html.escape(str(strategy["observed_signals"]))}</div>'
-            '<div class="action-row"><b>사용하지 않은 근거</b> · 나이·지역·고객 ID</div>'
+            '<div class="action-row"><b>직접 행동 신호에서 제외</b> · 나이·지역·고객 ID'
+            '<br><span class="small">나이·지역은 예측 모델의 위험 점수를 통해 캠페인 단계에 간접 영향을 줄 수 있습니다.</span></div>'
             f'<div class="action-row"><b>근거 수준</b> · {html.escape(str(strategy["evidence_level"]))}</div></div>',
             unsafe_allow_html=True,
         )
@@ -675,6 +682,33 @@ CAMPAIGN_ALLOCATION_MODES = {
     "risk_priority": "위험 점수 순",
     "economic_reference": "가정 매출효과-비용 순 (참고)",
 }
+
+
+def _campaign_net_curve(
+    frame: pd.DataFrame,
+    success_rate: float,
+    fixed_cost: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a down-sampled cumulative net-value curve for a campaign pool."""
+
+    if frame.empty:
+        return np.array([], dtype=float), np.array([], dtype=float)
+
+    ordered = frame.copy()
+    if fixed_cost is not None:
+        ordered["cost"] = fixed_cost
+    cumulative_benefit = (
+        ordered["probability"] * float(success_rate) * ordered["customer_value"]
+    ).cumsum().to_numpy()
+    cumulative_net = (
+        cumulative_benefit - ordered["cost"].cumsum().to_numpy()
+    ) / 1_000_000
+    x = np.arange(1, len(ordered) + 1) / len(ordered) * 100
+    step = max(1, len(ordered) // 350)
+    indexes = np.unique(
+        np.concatenate([np.arange(0, len(ordered), step), [len(ordered) - 1]])
+    )
+    return x[indexes], cumulative_net[indexes]
 
 
 def _prepare_campaign_plan(
@@ -930,18 +964,6 @@ def campaign_planning_panel(
             float(c3.number_input("높은 단가(원)", min_value=0, value=5000, step=100)),
         ]
 
-    def net_curve(frame: pd.DataFrame, fixed_cost: float | None = None) -> tuple[np.ndarray, np.ndarray]:
-        ordered = frame.copy()
-        if fixed_cost is not None:
-            ordered["cost"] = fixed_cost
-            ordered["assumed_net_value"] = ordered["probability"] * success_rate * ordered["customer_value"] - fixed_cost
-        cumulative_benefit = (ordered["probability"] * success_rate * ordered["customer_value"]).cumsum().to_numpy()
-        cumulative_net = (cumulative_benefit - ordered["cost"].cumsum().to_numpy()) / 1_000_000
-        x = np.arange(1, len(ordered) + 1) / len(ordered) * 100
-        step = max(1, len(ordered) // 350)
-        indexes = np.unique(np.concatenate([np.arange(0, len(ordered), step), [len(ordered) - 1]]))
-        return x[indexes], cumulative_net[indexes]
-
     active_plan_order = [plan for plan in plan_order if plan in included]
     curve_tabs = st.tabs(["전체"] + active_plan_order)
     frames = [("전체", work)] + [
@@ -953,14 +975,23 @@ def campaign_planning_panel(
             fig = go.Figure()
             if scenario_costs:
                 for cost, color, dash in zip(scenario_costs, [COLORS["green"], COLORS["blue"], COLORS["orange"]], ["solid", "dash", "dot"]):
-                    x, y = net_curve(frame, cost)
+                    x, y = _campaign_net_curve(frame, success_rate, cost)
                     fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"접촉 단가 {cost:,.0f}원", line={"color": color, "dash": dash, "width": 3}))
             else:
-                x, y = net_curve(frame)
+                x, y = _campaign_net_curve(frame, success_rate)
                 fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="가정 매출효과-비용", fill="tozeroy", line={"color": COLORS["orange"], "width": 3}))
-                if name == "전체" and selected_count:
+                if name == "전체" and selected_count and x.size:
                     marker_index = int(np.argmin(np.abs(x - selected_count / pool * 100)))
                     fig.add_trace(go.Scatter(x=[x[marker_index]], y=[y[marker_index]], mode="markers", name="현재 계획", marker={"size": 12, "color": COLORS["navy"]}))
+            if frame.empty:
+                fig.add_annotation(
+                    text="이 요금제에는 현재 조건을 충족하는 고객이 없습니다.",
+                    x=.5,
+                    y=.5,
+                    xref="paper",
+                    yref="paper",
+                    showarrow=False,
+                )
             fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
             fig.update_layout(title=f"{name} · 연락 범위별 가정 매출효과-비용", xaxis_title="현재 배분 순서 기준 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 매출효과-비용(백만원)", legend_orientation="h")
             st.plotly_chart(plot_style(fig, 390), width="stretch")

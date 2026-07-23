@@ -3,7 +3,7 @@
 *.joblib -text
 *.npy -text
 *.npz -text
-*.pdf -text
+*.pdf binary
 *.png -text
 *.pptx -text
 *.zip -text

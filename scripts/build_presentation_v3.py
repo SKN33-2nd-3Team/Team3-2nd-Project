@@ -7,6 +7,7 @@ saved OOF probabilities, and the already-fitted candidate pipeline.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ RUN = ROOT / "experiments" / "submission_full_comparison" / RUN_ID
 ARTIFACTS = ROOT / "artifacts"
 SOURCE_DIR = ARTIFACTS / "presentation_v3"
 FIGURE_DIR = ROOT / "figures" / "presentation_v3"
+TRAINING_FIGURE_DIR = ROOT / "figures" / "training"
 CANDIDATE = ROOT / "models" / "candidates" / RUN_ID / "candidate_pipeline.joblib"
 
 COLORS = {
@@ -480,6 +482,11 @@ def main() -> None:
             }
         )
     pd.DataFrame(inventory).to_csv(FIGURE_DIR / "figure_inventory.csv", index=False, encoding="utf-8-sig")
+    TRAINING_FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    for training_figure in sorted(TRAINING_FIGURE_DIR.glob("*.png")):
+        refreshed = FIGURE_DIR / training_figure.name
+        if refreshed.exists():
+            shutil.copy2(refreshed, training_figure)
     print(json.dumps({"figures": len(inventory), "source_csvs": len(list(SOURCE_DIR.glob("*.csv")))}, ensure_ascii=False))
 
 

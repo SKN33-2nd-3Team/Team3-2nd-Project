@@ -138,11 +138,14 @@ def main() -> None:
         raise RuntimeError("One or more schema smoke-test cases failed their expected behavior.")
 
     previous = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+    candidate_model = previous.get("candidate_model")
+    if candidate_model not in {"catboost", "xgboost", "lightgbm"}:
+        raise RuntimeError(f"Unexpected candidate model in metadata: {candidate_model!r}")
     feature_names = reloaded.named_steps["pre"].get_feature_names_out().tolist()
     metadata = {
         **previous,
         "status": "FULL_COMPARISON_COMPLETED_CANDIDATE_AWAITING_BUSINESS_REVIEW",
-        "candidate_model": "catboost",
+        "candidate_model": candidate_model,
         "feature_variant": variant,
         "reload_verified": True,
         "fresh_process_reload_verified": True,
@@ -166,6 +169,8 @@ def main() -> None:
             "numpy": version("numpy"),
             "scikit-learn": version("scikit-learn"),
             "catboost": version("catboost"),
+            "xgboost": version("xgboost"),
+            "lightgbm": version("lightgbm"),
             "joblib": version("joblib"),
         },
         "artifact_sha256": None,
@@ -192,8 +197,8 @@ def main() -> None:
         markdown_rows.append("| " + " | ".join(str(value).replace("|", "\\|") for value in row) + " |")
     table = "\n".join(markdown_rows)
     SMOKE_REPORT.write_text(
-        "# 최종 CatBoost 앱 스키마 호환성\n\n"
-        "저장된 CatBoost 후보는 상태 없는 Feature 변환기를 고정 모듈로 옮긴 뒤에도 예측값이 같고 새 Python 프로세스에서 로드됩니다. 이 검사는 입력 스키마 호환성 검사입니다.\n\n"
+        f"# 최종 {candidate_model} 앱 스키마 호환성\n\n"
+        f"저장된 {candidate_model} 후보는 상태 없는 Feature 변환기를 고정 모듈로 옮긴 뒤에도 예측값이 같고 새 Python 프로세스에서 로드됩니다. 이 검사는 입력 스키마 호환성 검사입니다.\n\n"
         f"{table}\n\n"
         "- 열 순서 변경과 미등록 범주는 허용합니다.\n"
         "- 필수 수치 열 누락과 잘못된 수치 값은 조용히 변환하지 않고 거부합니다.\n"
@@ -210,9 +215,11 @@ def main() -> None:
     manifest["checkpoints"]["presentation_evidence"] = "PASSED"
     manifest["checkpoints"]["instructor_audit"] = "PASSED_WITH_EXTERNAL_HOLDOUT_LIMITATION"
     manifest["last_checkpoint"] = "final_audit"
-    manifest["candidate_model"] = "catboost"
+    manifest["candidate_model"] = candidate_model
     manifest["external_labeled_holdout"] = "NOT_AVAILABLE"
-    manifest["retraining_performed_during_completion"] = False
+    manifest["retraining_performed_during_completion"] = bool(
+        manifest.get("retraining_performed_during_completion", False)
+    )
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     print(json.dumps({"fresh_process_reload": True, "schema_cases": len(smoke), "all_cases_passed": True}, ensure_ascii=False))

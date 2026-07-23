@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -151,6 +152,62 @@ def atomic_copy(source: Path, destination: Path, expected_hash: str) -> None:
     os.replace(temporary, destination)
 
 
+def publish_bundle(
+    copies: dict[Path, Path],
+    texts: dict[Path, str],
+    frames: dict[Path, pd.DataFrame],
+) -> None:
+    """Stage a promotion bundle and roll back every destination on publish failure."""
+    token = uuid.uuid4().hex
+    staged: dict[Path, Path] = {}
+    backups: dict[Path, Path | None] = {}
+    try:
+        for destination, source in copies.items():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(f".{destination.name}.{token}.tmp")
+            shutil.copy2(source, temporary)
+            if sha256(temporary) != sha256(source):
+                raise RuntimeError(f"staged model copy hash mismatch: {destination}")
+            staged[destination] = temporary
+        for destination, content in texts.items():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(f".{destination.name}.{token}.tmp")
+            temporary.write_text(content, encoding="utf-8", newline="\n")
+            staged[destination] = temporary
+        for destination, frame in frames.items():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(f".{destination.name}.{token}.tmp")
+            frame.to_csv(temporary, index=False, encoding="utf-8-sig", lineterminator="\n")
+            staged[destination] = temporary
+
+        for destination in staged:
+            if destination.exists():
+                backup = destination.with_name(f".{destination.name}.{token}.bak")
+                shutil.copy2(destination, backup)
+                backups[destination] = backup
+            else:
+                backups[destination] = None
+        published: list[Path] = []
+        try:
+            for destination, temporary in staged.items():
+                os.replace(temporary, destination)
+                published.append(destination)
+        except Exception:
+            for destination in reversed(published):
+                backup = backups[destination]
+                if backup is None:
+                    destination.unlink(missing_ok=True)
+                else:
+                    os.replace(backup, destination)
+            raise
+    finally:
+        for temporary in staged.values():
+            temporary.unlink(missing_ok=True)
+        for backup in backups.values():
+            if backup is not None:
+                backup.unlink(missing_ok=True)
+
+
 def main() -> None:
     candidate_path, candidate_meta, candidate_hash = verify_candidate()
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -193,8 +250,13 @@ def main() -> None:
     }).sort_values("importance", ascending=False).reset_index(drop=True)
     importance.insert(0, "rank", np.arange(1, len(importance) + 1))
 
-    active_model = MODEL_DIR / "music_churn_pipeline.joblib"
-    atomic_copy(candidate_path, active_model, candidate_hash)
+    fine_summary = pd.read_csv(ART / "top3_fine_tuning_summary.csv")
+    fine_row = fine_summary.loc[fine_summary["model"].eq("catboost")]
+    if fine_row.empty:
+        raise RuntimeError("top3 fine-tuning summary has no catboost row")
+    seed_scores = pd.read_csv(RUN / "seed_stability" / "catboost_seeds.csv")
+    if seed_scores.empty:
+        raise RuntimeError("catboost seed-stability evidence is empty")
     metadata = {
         "model": "catboost",
         "run_id": candidate_meta["run_id"],
@@ -202,8 +264,8 @@ def main() -> None:
         "selection_rule": "상위 3개 모델 중 Fine-tuned 5-Fold CV PR-AUC가 가장 높고 OOF·5개 Seed·Bootstrap 근거가 안정적이어서 선정했습니다.",
         "selection_metric": "fine_tuned_cv_pr_auc",
         "selection_evidence": {
-            "fine_tuned_cv_pr_auc": 0.9479127420954035,
-            "five_seed_mean_pr_auc": 0.9478803955721158,
+            "fine_tuned_cv_pr_auc": float(fine_row.iloc[0]["best_cv_pr_auc"]),
+            "five_seed_mean_pr_auc": float(seed_scores["pr_auc"].mean()),
             "oof_pr_auc": candidate_meta["metrics"]["pr_auc"],
             "oof_roc_auc": candidate_meta["metrics"]["roc_auc"],
         },
@@ -211,6 +273,8 @@ def main() -> None:
         "evaluation_limit": "독립된 외부 라벨 Holdout이 없어 모든 운영 지표는 5-Fold OOF 근거입니다.",
         "reload_verified": True,
         "fresh_process_reload_verified": bool(candidate_meta.get("fresh_process_reload_verified")),
+        "package_versions": candidate_meta.get("package_versions", {}),
+        "candidate_finalized_at_utc": candidate_meta.get("finalized_at_utc"),
         "artifact_sha256": candidate_hash,
         "trusted_source_note": "저장소 내부 후보 경로와 메타데이터 SHA-256을 검증한 뒤 로드합니다.",
         "app_default_scenario_id": "balanced_f1",
@@ -222,18 +286,56 @@ def main() -> None:
             "positive_label": 1,
             "note": "제공된 관측 라벨이며 예측 기간은 정의되지 않았습니다.",
         },
-        "feature_variant": "log_numeric",
+        "feature_variant": candidate_meta["feature_variant"],
         "promoted_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_candidate": str(candidate_path.relative_to(ROOT)).replace("\\", "/"),
         "archive_path": archive_reference,
     }
-    (MODEL_DIR / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    predictions.to_csv(ART / "test_predictions.csv", index=False, encoding="utf-8-sig")
-    importance.to_csv(ART / "feature_importance.csv", index=False, encoding="utf-8-sig")
-    scenarios.to_csv(ART / "operating_scenarios_oof_catboost.csv", index=False, encoding="utf-8-sig")
-    sweep.to_csv(ART / "threshold_sweep_oof_catboost.csv", index=False, encoding="utf-8-sig")
-    topk.to_csv(ART / "topk_lift_oof_catboost.csv", index=False, encoding="utf-8-sig")
-    deciles.to_csv(ART / "risk_decile_oof_catboost.csv", index=False, encoding="utf-8-sig")
+    feature_schema = {
+        "features": test.columns.tolist(),
+        "target": "churned",
+        "positive_class": 1,
+        "thresholds": {
+            row.scenario_id: float(row.threshold)
+            for row in scenarios.itertuples(index=False)
+        },
+        "default_scenario": "balanced_f1",
+        "schema_note": "customer_id는 입력 계약에는 포함되지만 모델 Feature 변환 단계에서 제외됩니다.",
+    }
+    primary_metrics = candidate_meta["metrics"]
+    metrics = pd.DataFrame([{
+        "model": "catboost",
+        "evaluation_split": "five_fold_oof",
+        "threshold": 0.5,
+        **primary_metrics,
+        "evaluation_limit": metadata["evaluation_limit"],
+    }])
+    metadata_text = json.dumps(metadata, ensure_ascii=False, indent=2) + "\n"
+    schema_text = json.dumps(feature_schema, ensure_ascii=False, indent=2) + "\n"
+    publish_bundle(
+        copies={
+            MODEL_DIR / "music_churn_pipeline.joblib": candidate_path,
+            ROOT / "models" / "churn_pipeline.joblib": candidate_path,
+        },
+        texts={
+            MODEL_DIR / "metadata.json": metadata_text,
+            ART / "model_metadata.json": metadata_text,
+            ART / "feature_schema.json": schema_text,
+        },
+        frames={
+            ART / "metrics.csv": metrics,
+            ART / "test_predictions.csv": predictions,
+            ART / "feature_importance.csv": importance,
+            ART / "operating_scenarios_oof_catboost.csv": scenarios,
+            ART / "threshold_sweep_oof_catboost.csv": sweep,
+            ART / "topk_lift_oof_catboost.csv": topk,
+            ART / "risk_decile_oof_catboost.csv": deciles,
+        },
+    )
+    if sha256(MODEL_DIR / "music_churn_pipeline.joblib") != candidate_hash:
+        raise RuntimeError("active app model hash differs from promoted candidate")
+    if sha256(ROOT / "models" / "churn_pipeline.joblib") != candidate_hash:
+        raise RuntimeError("submission model alias hash differs from promoted candidate")
 
     manifest_path = RUN / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -241,8 +343,14 @@ def main() -> None:
     manifest["last_checkpoint"] = "hardened_local_app_promotion"
     manifest["blocked_reason"] = None
     manifest["checkpoints"]["app_schema_smoke_test"] = "PASSED"
-    manifest["retraining_performed_during_completion"] = False
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    manifest["retraining_performed_during_completion"] = bool(
+        manifest.get("retraining_performed_during_completion")
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     print(json.dumps({
         "model": "catboost",
         "sha256": candidate_hash,

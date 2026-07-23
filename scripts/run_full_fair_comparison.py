@@ -1,7 +1,8 @@
 """Checkpointed full fair comparison. It never reads P0 predictions for selection."""
 from __future__ import annotations
 
-import argparse, json, os, time, traceback
+import argparse, json, os, shutil, time, traceback
+from datetime import datetime, timezone
 from pathlib import Path
 import joblib, numpy as np, pandas as pd
 from catboost import CatBoostClassifier
@@ -45,20 +46,85 @@ class Features(BaseEstimator,TransformerMixin):
 
 def manifest(): return json.loads((RUN/"run_manifest.json").read_text(encoding="utf-8"))
 def save_manifest(m): (RUN/"run_manifest.json").write_text(json.dumps(m,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+
+def _top3() -> list[str]:
+    path=ROOT/"artifacts"/"top3_selection_matrix.csv"
+    if path.exists():
+        return pd.read_csv(path).sort_values("rank").model.astype(str).tolist()
+    try:
+        return [str(name) for name in manifest().get("top3",[])]
+    except (FileNotFoundError,json.JSONDecodeError):
+        return []
+
+def required_outputs(step: str) -> list[Path]:
+    static={
+      "fair_fold_assignment":[RUN/"cv_fold_assignments.csv",*[RUN/f"fold_{i}.npz" for i in range(FOLDS)]],
+      "insight_inventory":[ROOT/"artifacts"/"current_insight_inventory.csv",ROOT/"reports"/"current_insight_inventory.md"],
+      "preprocessing_experiments":[ROOT/"artifacts"/"preprocessing_experiment_results.csv",ROOT/"artifacts"/"insight_preprocessing_register.csv",ROOT/"reports"/"insight_driven_preprocessing_review.md",*[RUN/f"oof_feature_{v}_logistic.npy" for v in VARIANTS]],
+      "eight_model_baseline":[ROOT/"artifacts"/"model_comparison_fair.csv",*[RUN/"baseline"/f"{name}.json" for name in models()],*[RUN/f"oof_{name}.npy" for name in models()]],
+      "final_common_feature_set":[RUN/"tree_feature_validation.csv",RUN/"feature_selection_summary.csv"],
+      "seven_model_random_search":[ROOT/"artifacts"/"random_search_summary.csv",*[RUN/"random_search"/f"{name}_random_search.csv" for name in models() if name!="dummy"],*[RUN/"random_search"/f"{name}_best.joblib" for name in models() if name!="dummy"],*[RUN/f"oof_search_{name}.npy" for name in models() if name!="dummy"]],
+      "top3_selection":[ROOT/"artifacts"/"top3_selection_matrix.csv",ROOT/"reports"/"top3_selection_decision.md"],
+      "seed_stability":[ROOT/"artifacts"/"seed_stability_summary.csv",RUN/"seed_stability_all.csv"],
+    }
+    if step=="top3_fine_tuning":
+        top=_top3()
+        if len(top)!=3:
+            return [ROOT/"artifacts"/"top3_selection_matrix.csv"]
+        return [ROOT/"artifacts"/"top3_fine_tuning_summary.csv",*[RUN/"fine_tuning"/f"{name}_fine_tuning.csv" for name in top],*[RUN/"fine_tuning"/f"{name}_best.joblib" for name in top],*[RUN/f"oof_fine_{name}.npy" for name in top]]
+    if step=="seed_stability":
+        top=_top3()
+        return static[step]+[RUN/"seed_stability"/f"{name}_seeds.csv" for name in top]
+    return static.get(step,[])
+
 def done(step):
-    m=manifest(); return m["checkpoints"].get(step)=="PASSED"
+    m=manifest()
+    return m["checkpoints"].get(step)=="PASSED" and all(path.is_file() for path in required_outputs(step))
 def mark(step,status="PASSED",**extra):
     m=manifest(); m["checkpoints"][step]=status; m["last_checkpoint"]=step; m.update(extra); save_manifest(m)
 def load():
     d=pd.read_csv(ROOT/"data"/"train.csv"); return d.drop(columns="churned"),d.churned.astype(int)
 def folds(y):
     out=RUN/"cv_fold_assignments.csv"
-    if out.exists(): return [tuple(np.load(RUN/f"fold_{i}.npz").values()) for i in range(FOLDS)]
+    fold_files=[RUN/f"fold_{i}.npz" for i in range(FOLDS)]
+    if out.exists() and all(path.exists() for path in fold_files):
+        loaded=[]
+        for path in fold_files:
+            with np.load(path) as data:
+                loaded.append((data["train"],data["valid"]))
+        if len(pd.read_csv(out))==len(y):
+            return loaded
     cv=StratifiedKFold(FOLDS,shuffle=True,random_state=SEED); arr=[]
     for i,(tr,va) in enumerate(cv.split(np.zeros(len(y)),y)): np.savez(RUN/f"fold_{i}.npz",train=tr,valid=va); arr.append((tr,va))
     f=np.empty(len(y),int)
     for i,(_,va) in enumerate(arr): f[va]=i
     pd.DataFrame({"row_id":np.arange(len(y)),"fold":f}).to_csv(out,index=False); return arr
+
+def prepare_fresh_run() -> Path:
+    """Archive generated run state and reset checkpoints without deleting evidence."""
+    RUN.mkdir(parents=True,exist_ok=True)
+    stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    archive=ROOT/"tmp"/"full_fair_runs"/f"{RID}_{stamp}"
+    archive.mkdir(parents=True,exist_ok=False)
+    keep={"execution_plan.md","run_config.json"}
+    for path in list(RUN.iterdir()):
+        if path.name in keep:
+            continue
+        shutil.move(str(path),archive/path.name)
+    fresh={
+      "run_id":RID,
+      "status":"IN_PROGRESS",
+      "last_checkpoint":None,
+      "checkpoints":{"repository_and_data_audit":"PASSED"},
+      "completed_models":[],
+      "completed_trials":{},
+      "blocked_reason":None,
+      "resume_command":"python scripts/run_full_fair_comparison.py --stage all",
+      "external_labeled_holdout":"NOT_AVAILABLE",
+      "retraining_performed_during_completion":True,
+    }
+    save_manifest(fresh)
+    return archive
 def build(X,model,variant,scale=False):
     sample=Features(variant).transform(X.iloc[:10]); nums=sample.select_dtypes(include=np.number).columns.tolist(); cats=[c for c in sample.columns if c not in nums]
     ns=[("impute",SimpleImputer(strategy="median"))]+([("scale",StandardScaler())] if scale else [])
@@ -113,9 +179,10 @@ def baseline():
     for name,(model,sc) in models().items():
         if only and name!=only: continue
         saved=out/f"{name}.json"
-        if saved.exists(): row=json.loads(saved.read_text(encoding="utf-8"))
-        elif (RUN/f"oof_{name}.npy").exists():
-            p=np.load(RUN/f"oof_{name}.npy"); row={"model":name,"feature_variant":v,"cv_folds":5,"seconds":np.nan,**score(y,p)}; saved.write_text(json.dumps(row,indent=2),encoding="utf-8")
+        oof_file=RUN/f"oof_{name}.npy"
+        if saved.exists() and oof_file.exists(): row=json.loads(saved.read_text(encoding="utf-8"))
+        elif oof_file.exists():
+            p=np.load(oof_file); row={"model":name,"feature_variant":v,"cv_folds":5,"seconds":np.nan,**score(y,p)}; saved.write_text(json.dumps(row,indent=2),encoding="utf-8")
         else:
             t=time.time(); p=oof(X,y,build(X,model,v,sc),cv); write_oof(name,p); row={"model":name,"feature_variant":v,"cv_folds":5,"seconds":time.time()-t,**score(y,p)}; saved.write_text(json.dumps(row,indent=2),encoding="utf-8")
         rows.append(row)
@@ -150,6 +217,9 @@ def randomized():
             rs=pd.read_csv(result); best=joblib.load(bestfile)
         elif name in {"random_forest", "gradient_boosting"}:
             # Checkpoint each sampled trial: identical 24-trial/5-fold protocol, resilient to command time limits.
+            cv_jobs = 1 if name == "random_forest" else max(
+                1, min(5, int(os.environ.get("FULL_CV_JOBS", "1")))
+            )
             params_file=out/f"{name}_sampled_params.json"; partial=out/f"{name}_partial_trials.csv"
             samples=json.loads(params_file.read_text()) if params_file.exists() else list(ParameterSampler(search_space(name),n_iter=cfg["random_search_min_trials"][name],random_state=SEED))
             if not params_file.exists(): params_file.write_text(json.dumps(samples,default=lambda x: int(x) if isinstance(x,np.integer) else float(x)),encoding="utf-8")
@@ -157,7 +227,7 @@ def randomized():
             for trial in range(start,min(start+limit,len(samples))):
                 candidate=clone(build(X,model,v,sc)).set_params(**samples[trial]); started=time.time()
                 try:
-                    values=cross_val_score(candidate,X,y,scoring="average_precision",cv=cv,n_jobs=1); add.append({"trial":trial,"params_json":json.dumps(samples[trial]),"mean_test_score":float(values.mean()),"std_test_score":float(values.std()),"status":"success","seconds":time.time()-started})
+                 values=cross_val_score(candidate,X,y,scoring="average_precision",cv=cv,n_jobs=cv_jobs); add.append({"trial":trial,"params_json":json.dumps(samples[trial]),"mean_test_score":float(values.mean()),"std_test_score":float(values.std()),"status":"success","seconds":time.time()-started})
                 except Exception as exc: add.append({"trial":trial,"params_json":json.dumps(samples[trial]),"mean_test_score":np.nan,"std_test_score":np.nan,"status":f"failed:{type(exc).__name__}","seconds":time.time()-started})
                 pd.concat([prior,pd.DataFrame(add)],ignore_index=True).to_csv(partial,index=False)
             rs=pd.read_csv(partial)
@@ -219,7 +289,10 @@ def seed_stability():
         full=pd.concat(complete); full.to_csv(RUN/"seed_stability_all.csv",index=False); full.groupby("model")[["pr_auc","roc_auc","f1","recall","precision","fn","fp","seconds"]].agg(["mean","std","min","max"]).to_csv(ROOT/"artifacts"/"seed_stability_summary.csv"); mark("seed_stability")
 
 def main():
-    a=argparse.ArgumentParser(); a.add_argument("--stage",default="all",choices=["setup","features","baseline","tree_features","search","fine","seeds","all"]); z=a.parse_args(); RUN.mkdir(parents=True,exist_ok=True); CAND.mkdir(parents=True,exist_ok=True)
+    a=argparse.ArgumentParser(); a.add_argument("--stage",default="all",choices=["setup","features","baseline","tree_features","search","fine","seeds","all"]); a.add_argument("--fresh-run",action="store_true",help="archive generated run state under tmp/ and restart every checkpoint"); z=a.parse_args(); RUN.mkdir(parents=True,exist_ok=True); CAND.mkdir(parents=True,exist_ok=True)
+    if z.fresh_run:
+        archive=prepare_fresh_run()
+        print(json.dumps({"fresh_run":True,"archived_previous_state":str(archive.relative_to(ROOT)).replace("\\","/")}))
     actions={"setup":[setup],"features":[setup,feature_experiments],"baseline":[setup,feature_experiments,baseline],"tree_features":[setup,feature_experiments,baseline,tree_feature_validation],"search":[setup,feature_experiments,baseline,tree_feature_validation,randomized],"fine":[setup,feature_experiments,baseline,tree_feature_validation,randomized,fine_tune],"seeds":[seed_stability],"all":[setup,feature_experiments,baseline,tree_feature_validation,randomized,fine_tune,seed_stability]}
     for fn in actions[z.stage]:
         try: fn()

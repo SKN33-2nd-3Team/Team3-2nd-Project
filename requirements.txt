@@ -11,3 +11,4 @@ catboost==1.2.10
 nbformat==5.10.4
 pypdf==5.1.0
 pytest==9.0.2
+reportlab==4.4.9
