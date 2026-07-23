@@ -555,8 +555,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 15478,
-      "sha256": "cb683877f3a1a965af827683170f8038f15f75f3b829cfaf595b32d0e10014d8"
+      "bytes": 29888,
+      "sha256": "75fb039e2fbdad8b366efc9d01b1e5a05ac45b2d613110d2ba6cbcb80894361c"
     },
     {
       "path": "reports/final_local_model_integration.md",
