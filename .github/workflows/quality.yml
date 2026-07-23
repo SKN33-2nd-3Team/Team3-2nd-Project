@@ -46,3 +46,6 @@ jobs:
 
       - name: Validate submission package
         run: python tools/validate_submission.py
+
+      - name: Validate Streamlit views
+        run: python tools/validate_streamlit.py
