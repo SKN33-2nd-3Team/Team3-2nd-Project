@@ -1,0 +1,10 @@
+﻿model,stage,pr_auc
+catboost,Baseline,0.9476223755797724
+catboost,Random search,0.9480044138600888
+catboost,Fine tuning,0.9478973394900624
+xgboost,Baseline,0.9470524975344944
+xgboost,Random search,0.9478322097156904
+xgboost,Fine tuning,0.947765165335874
+lightgbm,Baseline,0.94753361602361
+lightgbm,Random search,0.947707050266902
+lightgbm,Fine tuning,0.9477897350692124

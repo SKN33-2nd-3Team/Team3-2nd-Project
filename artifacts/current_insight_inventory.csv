@@ -1,0 +1,6 @@
+﻿insight_id,insight,evidence,evidence_file,status,related_features,actionability,limitation
+I01,Low weekly listening and high skip rate are associated with label,EDA rate charts / feature importance,repository audit / named artifact,VALIDATED_ASSOCIATION,"weekly_hours,song_skip_rate",Prioritize diagnostic segment; no causal claim,No time ordering
+I02,Free subscription has high observed churn,EDA categorical rates,repository audit / named artifact,VALIDATED_ASSOCIATION,subscription_type,Offer hypothesis only,Offer effect unknown
+I03,High service inquiries are associated with label,EDA categorical rates,repository audit / named artifact,VALIDATED_ASSOCIATION,customer_service_inquiries,Service-resolution experiment hypothesis,Association only
+I04,Pauses and age add predictive signal,feature_importance.csv,repository audit / named artifact,MODEL_SUPPORTED,"num_subscription_pauses,age",Use age only with fairness review,Age actionability restricted
+I05,Top-K risk ranking captures observed positives,P0 targeting artifacts,repository audit / named artifact,MODEL_SUPPORTED,model probability,Capacity planning only,"P0 reference, not selection evidence"

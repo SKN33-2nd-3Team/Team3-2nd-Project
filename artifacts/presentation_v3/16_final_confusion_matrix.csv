@@ -1,0 +1,5 @@
+﻿actual,predicted,count
+Retained,Retained,52251
+Retained,Churn,8575
+Churn,Retained,10500
+Churn,Churn,53674

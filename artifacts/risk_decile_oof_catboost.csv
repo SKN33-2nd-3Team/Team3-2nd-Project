@@ -1,0 +1,11 @@
+﻿risk_decile,customers,actual_churn_rate,mean_predicted_probability,actual_churners,model,evaluation_split,evaluation_note
+1,12500,0.0,0.0044368894892786,0,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+2,12500,0.01616,0.0338093819340616,202,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+3,12500,0.09936,0.1160281254815565,1242,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+4,12500,0.2136,0.2206401568223334,2670,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+5,12500,0.50096,0.4685792661178297,6262,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+6,12500,0.5312,0.5581076687770404,6640,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+7,12500,0.85608,0.8339533845289243,10701,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+8,12500,0.91688,0.9119685801997648,11461,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+9,12500,0.99968,0.9876327415990416,12496,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.
+10,12500,1.0,0.9987839990551928,12500,catboost,five_fold_oof,OOF 보정 진단이며 외부 Holdout 성능이 아닙니다.

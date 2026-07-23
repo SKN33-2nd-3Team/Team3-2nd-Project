@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.joblib -text
+*.npy -text
+*.npz -text
+*.pdf binary
+*.png -text
+*.pptx -text
+*.zip -text

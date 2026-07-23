@@ -47,7 +47,7 @@
 | `data/train.csv` | 125,000 | `e967211a589021bda2e024c28f31ca84662f53f8c0f2985b565f336bb040b9b5` |
 | `data/test.csv` | 75,000 | `b9081ab39f51a65eb39240e9d8c2dc90011efdb554d8b62896d4fa021252a71f` |
 
-`python -m src.run_pipeline` 실행 시 [`artifacts/model/metadata.json`](../artifacts/model/metadata.json)에 자동 기록된다.
+최종 후보 승격 스크립트 `python scripts/promote_full_fair_candidate.py`가 모델 SHA-256과 운영 메타데이터를 [`artifacts/model/metadata.json`](../artifacts/model/metadata.json)에 기록한다.
 
 ## 합성 데이터 판정 근거
 
@@ -72,7 +72,7 @@
 | 나이 25–34 | −1.0 | | 상담 Low | −4.5 |
 | 알림클릭 ≥ 5 | −1.5 | | 나이 35–60 | −2.5 |
 
-전체 검증 과정: [`scripts/eda_insight.py`](../scripts/eda_insight.py) → [INSIGHT_REPORT.md](../artifacts/eda_insight/INSIGHT_REPORT.md) §5 한계 ①
+전체 검증 과정: [`scripts/legacy/eda_insight.py`](../scripts/legacy/eda_insight.py) → [INSIGHT_REPORT.md](../artifacts/eda_insight/INSIGHT_REPORT.md) §5 한계 ①
 
 ## 실제 적용 한계
 

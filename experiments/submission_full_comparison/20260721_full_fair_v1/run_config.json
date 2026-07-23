@@ -1,0 +1,14 @@
+{
+  "run_id": "20260721_full_fair_v1",
+  "run_name": "Submission Full Fair Comparison Run",
+  "data": {"path": "data/train.csv", "target": "churned", "external_labeled_holdout": "NOT_AVAILABLE"},
+  "validation": {"method": "StratifiedKFold", "folds": 5, "shuffle": true, "random_state": 42, "selection_evidence": "OOF and CV only; existing P0 holdout is reference-only"},
+  "primary_metric": "average_precision",
+  "secondary_metrics": ["roc_auc", "f1", "recall", "precision", "fn", "fp", "brier"],
+  "models": ["dummy", "logistic", "decision_tree", "random_forest", "gradient_boosting", "xgboost", "lightgbm", "catboost"],
+  "random_search_min_trials": {"logistic": 20, "decision_tree": 20, "random_forest": 24, "gradient_boosting": 24, "xgboost": 30, "lightgbm": 30, "catboost": 24},
+  "fine_tuning_trials_per_top3": 15,
+  "seed_values": [17, 42, 77, 123, 2026],
+  "bootstrap_resamples": 1000,
+  "scope": {"p0_candidate": "PRESERVED_REFERENCE_ONLY", "operational_app": "NOT_MODIFIED", "production_promotion": "DEFERRED"}
+}

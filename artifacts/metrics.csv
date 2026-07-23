@@ -1,0 +1,2 @@
+model,evaluation_split,threshold,pr_auc,roc_auc,f1,recall,precision,fn,fp,tn,tp,evaluation_limit
+catboost,five_fold_oof,0.5,0.9478973394900623,0.9419585884019898,0.8491176447323667,0.8363823355252906,0.8622467830808527,10500,8575,52251,53674,독립된 외부 라벨 Holdout이 없어 모든 운영 지표는 5-Fold OOF 근거입니다.

@@ -1,134 +1,212 @@
-# 인공지능 모델 학습 결과서
+# PlaylistPro 인공지능 모델 학습 결과서
 
-> 작성일: 2026-07-21  
-> 실행 코드: [`src/run_pipeline.py`](../src/run_pipeline.py)  
-> 원시 결과: [`artifacts/model_comparison.csv`](../artifacts/model_comparison.csv)
+작성일: 2026-07-22<br>
+최종 기술 모델: CatBoost<br>
+완료 Run: `20260721_full_fair_v1`
 
-## 1. 문제와 평가 목표
+## 1. 문제 유형과 선정 원칙
 
-- 문제 유형: 고객 단위 이진 분류
-- Target: `churned` — 0 = 유지, 1 = 이탈
-- 1순위 지표: 이탈 Recall
-- 2순위 지표: PR-AUC
-- 보조 지표: Precision, F1, ROC-AUC, Brier, Confusion Matrix
-- 비용 가정: FN:FP = 3:1
-- 최종 모델: Gradient Boosting
-- 운영 임계값: 0.30
+`churned`(0=유지, 1=이탈)를 예측하는 이진 분류 문제입니다. 이탈 고객을 놓치는 FN과 불필요한 접촉을 만드는 FP를 함께 관리해야 하므로 다음 순서로 판단했습니다.
 
-FN은 떠날 고객을 놓쳐 고객가치 전체를 잃는 오류이고, FP는 남을 고객에게 불필요한 캠페인을 제공하는 오류입니다. 팀 가정상 FN 비용이 더 크므로 Recall을 우선하되, 캠페인 낭비를 통제하도록 Precision과 기대비용을 함께 평가했습니다.
+1. 모델 순위 품질: PR-AUC
+2. 내부 일반화: 고정 5-Fold OOF
+3. 운영 Guardrail: Recall, Precision, F1, FN, FP, 대상 고객 수
+4. 안정성: 5개 Seed와 1,000회 Bootstrap
+5. 확률 품질: Brier와 Calibration
+6. 재현성: 저장 Pipeline 재로딩·스키마 테스트
 
-## 2. 데이터 분할
+Accuracy 단독으로 모델을 선정하지 않았고, Threshold는 모델 선택과 분리했습니다.
 
-| 세트 | 비율 | 행 수 | 사용 목적 |
-|---|---:|---:|---|
-| Train | 60% | 75,000 | 모델·전처리기 학습 |
-| Validation | 20% | 25,000 | 모델 및 임계값 선택 |
-| Test | 20% | 25,000 | 후보별 고정 임계값으로 모델별 1회 최종 평가 |
+## 2. 데이터 분할과 비교 조건
 
-고객 1명 = 1행이며 반복 고객이 없으므로 `stratify=y` 층화 무작위 분할을 사용했습니다. 제공 `data/test.csv`는 라벨이 없어 모델 평가가 아니라 추론 대상으로만 사용했습니다.
-
-## 3. 후보 모델과 학습 조건
-
-| 모델 | 주요 설정 | 역할 |
-|---|---|---|
-| Dummy prior | `strategy="prior"` | 무학습 기준선 |
-| Logistic Regression | `max_iter=1200`, `class_weight="balanced"` | 해석 가능한 선형 기준선 |
-| Decision Tree | `max_depth=8`, `min_samples_leaf=40` | 단일 비선형 모델 |
-| Random Forest | `n_estimators=160`, `max_depth=14` | 배깅 앙상블 |
-| Extra Trees | `n_estimators=160`, `max_depth=16` | 무작위성 강화 앙상블 |
-| Gradient Boosting | `n_estimators=150`, `learning_rate=0.05`, `max_depth=3` | 순차 오답 보완 모델 |
-
-모든 후보는 같은 split, 같은 전처리 원칙, `random_state=42`를 사용했습니다. 하이퍼파라미터와 임계값은 Train/Validation 범위에서 결정했고, 각 후보 모델은 고정된 임계값으로 Test에서 한 번씩 평가했습니다. Test 결과를 보고 모델이나 임계값을 변경하지 않았습니다.
-
-## 4. Validation 모델 비교
-
-| 모델 | PR-AUC | ROC-AUC | Brier | 운영 임계값 | Recall | Precision | 기대비용/고객 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| **Gradient Boosting** | **0.9446** | **0.9391** | **0.1032** | **0.30** | **0.9621** | 0.7662 | **0.2090** |
-| Random Forest | 0.9376 | 0.9321 | 0.1099 | 0.33 | 0.9455 | 0.7688 | 0.2299 |
-| Decision Tree | 0.9259 | 0.9211 | 0.1130 | 0.23 | 0.9496 | 0.7276 | 0.2601 |
-| Extra Trees | 0.9119 | 0.9063 | 0.1297 | 0.32 | 0.9469 | 0.7148 | 0.2758 |
-| Logistic engineered | 0.8968 | 0.8898 | 0.1354 | 0.23 | 0.9423 | 0.6962 | 0.3000 |
-| Logistic raw | 0.8968 | 0.8898 | 0.1353 | 0.23 | 0.9423 | 0.6960 | 0.3002 |
-| Dummy prior | 0.5134 | 0.5000 | 0.2498 | 0.05 | 1.0000 | 0.5134 | 0.4866 |
-
-Gradient Boosting은 가장 높은 Validation PR-AUC와 가장 낮은 기대비용을 동시에 기록해 최종 모델로 선정했습니다.
-
-## 5. 임계값 결정
-
-1. Validation 확률에서 0.05~0.95를 0.01 간격으로 탐색했습니다.
-2. 각 임계값의 `(3 × FN + 1 × FP) / N`을 계산했습니다.
-3. 기대비용 최소, 동률이면 Recall, 다시 동률이면 Precision 순으로 선택했습니다.
-4. 선택한 0.30을 Test에 고정했습니다.
-
-전체 탐색값은 [`artifacts/threshold_sweep_validation.csv`](../artifacts/threshold_sweep_validation.csv)에 있습니다.
-
-| FN:FP 가정 | 최적 임계값 | Validation Recall | Validation Precision |
-|---|---:|---:|---:|
-| 1:1 | 0.52 | 83.7% | 86.2% |
-| 2:1 | 0.36 | 94.4% | 78.9% |
-| **3:1** | **0.30** | **96.2%** | **76.6%** |
-| 5:1 | 0.28 | 96.5% | 76.0% |
-| 8:1 | 0.22 | 97.6% | 71.6% |
-
-FN:FP = 3:1은 팀 가정이며 사업부 승인값이 아닙니다. 실제 LTV·접촉 비용·방어 성공률이 확보되면 임계값을 다시 계산해야 합니다.
-
-## 6. 최종 Test 평가
-
-| 지표 | 결과 |
-|---|---:|
-| PR-AUC | 0.9473 |
-| ROC-AUC | 0.9416 |
-| Recall @ 0.30 | 0.9617 |
-| Precision @ 0.30 | 0.7679 |
-| F1 @ 0.30 | 0.8540 |
-| 기대비용/고객 | 0.2082 |
-
-### Confusion Matrix
-
-| 실제 \ 예측 | 유지(0) | 이탈(1) |
-|---|---:|---:|
-| 유지(0) | TN 8,435 | FP 3,730 |
-| 이탈(1) | FN 492 | TP 12,343 |
-
-- FN 492명: 실제 이탈 고객 중 3.8%를 놓쳤습니다.
-- FP 3,730명: 유지 고객에게 불필요한 캠페인을 제안할 수 있습니다.
-- 임계값을 0.5보다 낮춰 FN을 줄였고, 그 대가로 FP가 늘었습니다.
-
-## 7. 모델 해석
-
-![Feature Importance](../artifacts/eda/feature_importance.png)
-
-상위 중요도는 `weekly_hours`, Free 요금제, 상담 문의 High·Low, `num_subscription_pauses`, `song_skip_rate`, `age`, Student 요금제 순입니다.
-
-Feature Importance는 모델의 분기 기여도이며 이탈의 원인을 증명하지 않습니다. 따라서 유지 활동은 상담 개선, 요금제 제안, 일시정지 고객 케어, 콘텐츠 추천 개선에 대한 **실험 후보**로만 제안합니다.
-
-## 8. 최종 모델 저장과 추론 검증
-
-| 파일 | 내용 |
+| 항목 | 설정 |
 |---|---|
-| `artifacts/model/music_churn_pipeline.joblib` | 피처 생성·전처리·Gradient Boosting 통합 Pipeline |
-| `artifacts/model/metadata.json` | 모델명, threshold, Feature 순서, 지표, 환경, 데이터 해시 |
-| `artifacts/model_comparison.csv` | 후보 7종 Validation/Test 비교 |
-| `artifacts/test_predictions.csv` | 제공 test 75,000명의 확률·위험 등급 |
+| 데이터 | Train 125,000명, Test 75,000명(무라벨) |
+| 비교 Fold | 고정 Stratified 5-Fold |
+| Random State | 42 |
+| 공통 Feature | `log_numeric` |
+| 전처리 | 각 학습 Fold 내부 Pipeline Fit |
+| 1차 지표 | PR-AUC |
+| 외부 라벨 Holdout | 없음 |
 
-Streamlit은 저장 Pipeline을 `joblib.load`로 불러와 신규 입력 DataFrame에 `predict_proba`를 호출합니다. 모델 재학습 없이 단일 고객과 배치 고객을 예측합니다.
+모든 8개 모델은 저장된 동일 Fold와 동일 Feature를 사용했습니다. 제공 Test는 추론에만 사용했으며 모델·파라미터·Threshold 선택에 사용하지 않았습니다.
 
-## 9. 딥러닝 제외 근거
+## 3. Baseline과 후보 모델
 
-| 비교 | Test PR-AUC |
-|---|---:|
-| 7버킷 가법 로지스틱, 파라미터 15개 | 0.9468 |
-| Gradient Boosting, 신호 7개 | 0.9464 |
-| Gradient Boosting, 전체 18개 | 0.9473 |
-| 포화 셀 모델 이론 상한 | 0.9491 |
+| 모델 | 포함 이유 |
+|---|---|
+| DummyClassifier | 학습 모델이 넘어야 할 양성 비율 기준선 |
+| Logistic Regression | 해석 가능한 선형 기준선과 전처리 검증기 |
+| Decision Tree | 단순 비선형 규칙 기준 |
+| Random Forest | Bagging 기반 상호작용 비교 |
+| Gradient Boosting | 순차 Boosting 기준 |
+| XGBoost | 규제·병렬 Tree Boosting 후보 |
+| LightGBM | 빠른 Histogram Boosting과 높은 Recall 후보 |
+| CatBoost | 범주형·비선형 관계에 강한 Boosting 후보 |
 
-단순 가법 모델과 최종 모델 차이가 0.0005이고 합성 생성 규칙의 상한에 근접했습니다. MLP나 추가 앙상블은 복잡도 대비 기대 이득이 없어 적용하지 않았습니다.
+MLP·딥러닝은 일반 정형 합성 데이터에서 발표 가치 대비 비용이 낮고, 강한 Boosting 기준선이 이미 있어 의도적으로 제외했습니다.
 
-## 10. 한계와 개선 방향
+## 4. 전처리 기반 성능 개선
 
-1. 합성 데이터 생성 규칙을 복원한 결과이므로 실제 서비스 성능으로 해석할 수 없습니다.
-2. 예측 시점과 결과 기간이 없어 시간 누수·드리프트를 검증하지 못했습니다.
-3. 비용비와 LTV는 팀 가정입니다. 실제 캠페인 데이터로 재산정해야 합니다.
-4. 확률 calibration은 Brier 점수만 확인했습니다. Reliability diagram과 calibration slope를 추가할 수 있습니다.
-5. 실제 서비스 적용 전 시간 분할 외부 검증, A/B 테스트, 데이터 드리프트 감시가 필요합니다.
+Raw Logistic OOF PR-AUC 0.899495에서 비율 Feature와 로그 변환을 결합한 `log_numeric` Logistic 0.906293으로 +0.006798 개선했습니다. 비율만 추가한 단독 변형과 signal-pruned 변형은 개선하지 못해 제외했습니다. 최종 `log_numeric` Pipeline에는 네 가지 완화 비율과 로그 변환이 함께 남아 있습니다. Tree 검증에서 `log_numeric`의 Raw 대비 차이는 +0.000089로 작으므로, 공통 Feature의 일관성을 위한 선택이지 전체 성능 향상의 유일 원인으로 주장하지 않습니다.
+
+![성능 진행](../figures/training/01_performance_progression.png)
+
+## 5. 8개 모델 동일 조건 비교
+
+| 모델 | PR-AUC | ROC-AUC | F1 | Recall | Precision | Brier | 학습 초 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| CatBoost | **0.947622** | **0.941700** | 0.847008 | 0.824181 | **0.871136** | 0.095612 | 15.8 |
+| LightGBM | 0.947534 | 0.941629 | **0.852983** | **0.867345** | 0.839089 | **0.095306** | 12.2 |
+| XGBoost | 0.947052 | 0.941105 | 0.850891 | 0.845249 | 0.856608 | 0.101813 | 10.1 |
+| Gradient Boosting | 0.946362 | 0.940415 | 0.851252 | 0.852432 | 0.850075 | 0.102189 | 344.9 |
+| Random Forest | 0.939448 | 0.934125 | 0.850400 | 0.853461 | 0.847361 | 0.108169 | 26.2 |
+| Decision Tree | 0.936079 | 0.933386 | 0.846347 | 0.851794 | 0.840969 | 0.102677 | 10.9 |
+| Logistic | 0.906293 | 0.897232 | 0.811807 | 0.809954 | 0.813669 | 0.130653 | 3.7 |
+| Dummy | 0.513386 | 0.499987 | 0.678465 | 1.000000 | 0.513392 | 0.249821 | 2.5 |
+
+![8개 모델 비교](../figures/training/04_eight_model_fair_comparison.png)
+
+CatBoost의 PR-AUC가 가장 높고 LightGBM은 기본 Threshold에서 F1·Recall·Brier가 더 좋습니다. 이 Trade-off 때문에 단일 지표만으로 운영 정책을 확정하지 않았습니다.
+
+## 6. 하이퍼파라미터 탐색
+
+### 6.1 제한된 RandomizedSearch
+
+| 모델 | Trial | 유효 Trial | 최선 CV PR-AUC |
+|---|---:|---:|---:|
+| Logistic | 20 | 20 | 0.906304 |
+| Decision Tree | 20 | 20 | 0.935717 |
+| Random Forest | 24 | 24 | 0.942988 |
+| Gradient Boosting | 24 | 24 | 0.947974 |
+| XGBoost | 30 | 30 | 0.947856 |
+| LightGBM | 30 | 30 | 0.947743 |
+| CatBoost | 24 | 24 | **0.948016** |
+
+Random Forest와 Gradient Boosting은 사용자 요청에 따라 탐색 범위를 경량화했지만 모델을 제외하지 않았습니다. 완료된 Checkpoint를 재사용했고 제출 문서 생성 중 재학습하지 않았습니다.
+
+### 6.2 실제 상위 3개 Fine Tuning
+
+| 모델 | Trial | Fine CV PR-AUC | OOF PR-AUC | F1 | Recall | Precision |
+|---|---:|---:|---:|---:|---:|---:|
+| **CatBoost** | 15 | **0.947913** | **0.947897** | 0.849118 | 0.836382 | **0.862247** |
+| LightGBM | 15 | 0.947806 | 0.947790 | **0.851892** | **0.859850** | 0.844079 |
+| XGBoost | 15 | 0.947793 | 0.947765 | 0.850378 | 0.844283 | 0.856562 |
+
+![Top 3 튜닝](../figures/training/06_top3_fine_tuning_before_after.png)
+
+## 7. 최종 CatBoost 선정 근거
+
+| 판단 기준 | CatBoost | XGBoost | LightGBM | 해석 |
+|---|---:|---:|---:|---|
+| Fine CV PR-AUC | **0.947913** | 0.947793 | 0.947806 | 사전 1차 기준 1위 |
+| OOF PR-AUC | **0.947897** | 0.947765 | 0.947790 | 순위 품질 근소한 1위 |
+| 5-Seed 평균 PR-AUC | **0.947880** | 0.947726 | 0.947721 | Seed 평균 1위 |
+| 5-Seed 표준편차 | 0.000061 | **0.000061** | 0.000095 | 모두 안정적 |
+| Brier | 0.095215 | 0.095383 | **0.095049** | LightGBM 소폭 우위 |
+| 평균 Calibration gap | 0.01454 | 0.01899 | **0.01250** | LightGBM 소폭 우위 |
+
+CatBoost를 **기술 후보**로 선택한 이유는 Fine CV·OOF·Seed 평균 PR-AUC가 일관되게 근소한 1위이기 때문입니다. 그러나 Bootstrap 95% 구간이 겹치며, LightGBM은 기본 Threshold의 Recall·F1과 확률 보정에서 소폭 우위입니다. 따라서 “CatBoost가 모든 기준에서 압도적으로 최고”라고 주장하지 않습니다.
+
+![Bootstrap](../figures/training/08_bootstrap_confidence_intervals.png)
+
+## 8. Threshold와 운영 오류
+
+### 8.1 기본 Threshold 0.50
+
+| PR-AUC | ROC-AUC | F1 | Recall | Precision | TP | TN | FN | FP |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.947897 | 0.941959 | 0.849118 | 0.836382 | 0.862247 | 53,674 | 52,251 | 10,500 | 8,575 |
+
+![Confusion Matrix](../figures/training/16_final_confusion_matrix.png)
+
+### 8.2 운영 선택지
+
+| 시나리오 | Threshold | 대상 | Recall | Precision | F1 | FN | FP |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 재현율 우선 | 0.29 | 77,700 | 0.9518 | 0.7861 | 0.8611 | 3,091 | 16,617 |
+| 균형형 F1 | 0.35 | 76,143 | 0.9444 | 0.7959 | **0.8638** | 3,569 | 15,538 |
+| 정밀도 우선 | 0.74 | 48,463 | 0.7180 | **0.9507** | 0.8181 | 18,099 | 2,388 |
+
+![Threshold 지표](../figures/training/10_threshold_precision_recall_f1.png)
+
+![Threshold 대상과 오류](../figures/training/11_threshold_volume_fn_fp.png)
+
+기본 화면값 0.35는 OOF F1이 높은 선택지일 뿐 사업 확정값이 아닙니다. Recall 우선 여부, 접촉 가능 인원 및 FN·FP 비용이 바뀌면 다른 Threshold나 LightGBM이 선택될 수 있습니다.
+
+## 9. Top-K, Lift와 Risk Decile
+
+| Top K | 대상 고객 | 포착 이탈 고객 | Capture | Precision | Lift |
+|---:|---:|---:|---:|---:|---:|
+| 5% | 6,250 | 6,250 | 9.74% | 100.00% | 1.948 |
+| 10% | 12,500 | 12,500 | 19.48% | 100.00% | 1.948 |
+| 20% | 25,000 | 24,996 | 38.95% | 99.98% | 1.948 |
+| 30% | 37,500 | 36,457 | 56.81% | 97.22% | 1.894 |
+| 40% | 50,000 | 47,158 | 73.48% | 94.32% | 1.837 |
+
+![Top-K Lift](../figures/training/14_topk_capture_lift.png)
+
+![Risk Decile](../figures/training/15_risk_decile.png)
+
+이 값은 OOF 순위 진단입니다. 캠페인 Uplift나 실제 접촉 효과가 아닙니다. 합성 규칙이 위험 순위를 강하게 분리해 Top 10% Precision 100%가 나타났으므로 실서비스 기대치로 사용하면 안 됩니다.
+
+## 10. 오류·세그먼트 분석
+
+| 세그먼트 | 고객 | 관측 이탈률 | PR-AUC | Recall | Precision | FN | FP |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Family | 31,072 | 34.58% | 0.8893 | 0.7488 | 0.7929 | 2,699 | 2,101 |
+| Free | 31,269 | 79.41% | 0.9827 | 0.9271 | 0.9158 | 1,810 | 2,117 |
+| Premium | 31,354 | 33.91% | 0.8793 | 0.7238 | 0.7923 | 2,937 | 2,017 |
+| Student | 31,305 | 57.39% | 0.9461 | 0.8300 | 0.8644 | 3,054 | 2,340 |
+
+![세그먼트 오류](../figures/training/18_segment_error_analysis.png)
+
+Premium·Family의 Recall이 낮아 일률적인 전체 지표만으로 운영하면 놓치는 고객군이 달라질 수 있습니다. 다만 합성 데이터의 세그먼트 차이이며 실제 공정성 평가를 대신하지 않습니다.
+
+## 11. 모델 해석
+
+상위 중요 Feature는 Free 요금제, 문의 수준, `log1p_weekly_hours`, 나이, 일시정지 횟수, 청취시간, 스킵률입니다.
+
+![Feature Importance](../figures/training/17_final_feature_importance.png)
+
+Feature Importance는 모델이 예측에 사용한 정도이며 이탈의 인과 원인이 아닙니다. 나이·지역은 직접 행동 신호에서 제외하고 문의·청취시간·스킵·일시정지·구독 유형만 투명한 유지 전략 규칙에 사용합니다. 다만 나이·지역은 예측 모델 입력이므로 위험 점수와 캠페인 단계에 간접 영향을 줄 수 있으며, 운영 적용 전 공정성 검토가 필요합니다.
+
+## 12. 저장 모델과 재현성
+
+| 항목 | 결과 |
+|---|---|
+| 모델 파일 | `models/churn_pipeline.joblib` |
+| SHA-256 | `fc35ca91e9242dbc0e914db9f0dfc9e994024a5d4cc8d0d770d12321989a7d0e` |
+| 새 프로세스 재로딩 | 통과 |
+| 신규 한 행 예측 | 통과 |
+| 열 순서 변경 | 허용 |
+| 미등록 범주 | 허용 |
+| 필수 열 누락 | 거부 |
+| 잘못된 수치 자료형 | 거부 |
+| Streamlit 재학습 | 없음 |
+
+모델과 함께 `artifacts/feature_schema.json`, `artifacts/model_metadata.json`, `artifacts/metrics.csv`를 제출합니다.
+
+## 13. 한계와 최종 판단
+
+- 독립된 외부 라벨 Holdout이 없어 외부 일반화를 검증하지 못했습니다.
+- 예측 시점과 결과 기간이 없어 시간 기반 검증이 필요합니다.
+- 규칙 기반 합성 데이터의 높은 성능은 실제 서비스 기대치가 아닙니다.
+- OOF Threshold는 운영 Trade-off 참고값이며 독립 성능이 아닙니다.
+- 유지 행동의 Uplift·ROI는 실제 A/B 테스트와 미래 라벨이 필요합니다.
+- 실제 운영 모델 승인, Threshold 선택, 데이터 권리 및 배포는 사용자·조직의 결정입니다.
+
+현재 증거에서 CatBoost는 PR-AUC 우선 목표에 가장 부합하는 **권고 기술 후보**입니다. Recall·FN 최소화가 절대 우선이면 LightGBM 또는 CatBoost의 더 낮은 Threshold를 함께 검토해야 합니다.
+
+## 14. 재현 파일
+
+- `notebooks/03_model_experiments.ipynb`
+- `artifacts/model_comparison_fair.csv`
+- `artifacts/random_search_summary.csv`
+- `artifacts/top3_fine_tuning_summary.csv`
+- `artifacts/bootstrap_confidence_intervals.csv`
+- `artifacts/threshold_operating_scenarios_v2.csv`
+- `artifacts/topk_lift_oof_catboost.csv`
+- `artifacts/risk_decile_oof_catboost.csv`
+- `artifacts/metrics.csv`
+- `figures/training/`

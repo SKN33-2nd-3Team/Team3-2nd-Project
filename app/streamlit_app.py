@@ -1,7 +1,9 @@
-"""PlaylistPro Insight — Streamlit decision-support dashboard."""
-
+"""PlaylistPro 고객 이탈 위험 의사결정 지원 대시보드."""
 from __future__ import annotations
 
+import hashlib
+import html
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -18,10 +20,65 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src import retention_strategy as _retention_strategy  # noqa: E402
+
+# Streamlit reruns this file inside a long-lived Python process. Reload when
+# either the public planning function or the current economics defaults are
+# missing from the cached helper module, so source updates appear immediately.
+if (
+    not hasattr(_retention_strategy, "plan_economic_assumptions")
+    or getattr(_retention_strategy, "PLAN_ASSUMPTION_VERSION", 0) < 2
+):
+    _retention_strategy = importlib.reload(_retention_strategy)
+
+build_strategy_queue = _retention_strategy.build_strategy_queue
+derive_strategy_thresholds = _retention_strategy.derive_strategy_thresholds
+plan_economic_assumptions = _retention_strategy.plan_economic_assumptions
+recommend_retention_strategy = _retention_strategy.recommend_retention_strategy
+
 DATA_DIR = ROOT / "data"
 ARTIFACT_DIR = ROOT / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "model" / "music_churn_pipeline.joblib"
 METADATA_PATH = ARTIFACT_DIR / "model" / "metadata.json"
+TABLE_PATHS = {
+    "predictions": ARTIFACT_DIR / "test_predictions.csv",
+    "importance": ARTIFACT_DIR / "feature_importance.csv",
+    "targeting": ARTIFACT_DIR / "topk_lift_oof_catboost.csv",
+    "deciles": ARTIFACT_DIR / "risk_decile_oof_catboost.csv",
+    "scenarios": ARTIFACT_DIR / "operating_scenarios_oof_catboost.csv",
+    "threshold_sweep": ARTIFACT_DIR / "threshold_sweep_oof_catboost.csv",
+    "comparison": ARTIFACT_DIR / "model_comparison_fair.csv",
+    "fine_tuning": ARTIFACT_DIR / "top3_fine_tuning_summary.csv",
+    "preprocessing": ARTIFACT_DIR / "insight_preprocessing_register.csv",
+    "preprocessing_results": ARTIFACT_DIR / "preprocessing_experiment_results.csv",
+    "random_search": ARTIFACT_DIR / "random_search_summary.csv",
+    "insights": ARTIFACT_DIR / "current_insight_inventory.csv",
+    "bootstrap": ARTIFACT_DIR / "bootstrap_confidence_intervals.csv",
+    "calibration": ARTIFACT_DIR / "calibration_summary.csv",
+    "equal_contact": ARTIFACT_DIR / "equal_contact_comparison.csv",
+    "equal_recall": ARTIFACT_DIR / "equal_recall_comparison.csv",
+}
+SEED_STABILITY_PATH = ARTIFACT_DIR / "seed_stability_summary.csv"
+
+COLORS = {
+    "navy": "#18324a",
+    "blue": "#315d78",
+    "orange": "#e4573d",
+    "amber": "#e8a23a",
+    "green": "#2f7d62",
+    "muted": "#64748b",
+    "line": "#e5e7eb",
+}
+MODEL_KO = {
+    "dummy": "Dummy 기준",
+    "logistic": "Logistic 회귀",
+    "decision_tree": "Decision Tree",
+    "random_forest": "Random Forest",
+    "gradient_boosting": "Gradient Boosting",
+    "xgboost": "XGBoost",
+    "lightgbm": "LightGBM",
+    "catboost": "CatBoost",
+}
 
 st.set_page_config(
     page_title="PlaylistPro Insight",
@@ -29,615 +86,1102 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-    :root { --ink:#111827; --muted:#64748b; --line:#e5e7eb; --panel:#ffffff; --accent:#e4573d; --accent-soft:#fff1ed; --navy:#18324a; }
-    html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; color: var(--ink); letter-spacing:-.02em; }
-    .stApp { background: #f7f8fa; color: var(--ink); }
-    [data-testid="stSidebar"] { background: #102235; border-right: 0; }
-    [data-testid="stSidebar"] * { color: #e8eef5 !important; }
-    [data-testid="stSidebar"] .stRadio label { padding: .55rem .65rem; border-radius: .55rem; }
-    [data-testid="stSidebar"] .stRadio label:hover { background: rgba(255,255,255,.08); }
-    .brand { padding: .4rem 0 1.4rem 0; }
-    .brand-mark { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; background:#e4573d; color:white; border-radius:12px; font-size:23px; font-weight:700; margin-right:10px; }
-    .brand-name { font-family:'Space Grotesk'; font-weight:700; font-size:20px; color:white; vertical-align:middle; }
-    .eyebrow { color:var(--accent); text-transform:uppercase; letter-spacing:.12em; font-size:11px; font-weight:700; margin-bottom:.45rem; }
-    .hero { background:linear-gradient(115deg,#18324a 0%,#214765 65%,#315d78 100%); color:white; border-radius:20px; padding:26px 30px; margin-bottom:22px; box-shadow:0 12px 32px rgba(24,50,74,.12); }
-    .hero h1 { color:white; margin:0; font-size:34px; }
-    .hero p { color:#d9e4ed; max-width:780px; margin:.6rem 0 0; font-size:15px; line-height:1.6; }
-    .hero .tag { display:inline-block; background:rgba(255,255,255,.13); color:#f4f8fb; border-radius:999px; padding:6px 10px; margin-top:14px; font-size:12px; }
-    .metric-card { background:white; border:1px solid var(--line); border-radius:16px; padding:17px 18px; min-height:112px; box-shadow:0 5px 18px rgba(15,23,42,.035); }
-    .metric-label { color:var(--muted); font-size:12px; font-weight:600; }
-    .metric-value { color:var(--ink); font-family:'Space Grotesk'; font-size:28px; font-weight:700; margin-top:8px; }
-    .metric-delta { color:var(--accent); font-size:12px; margin-top:4px; }
-    .section-label { margin-top:25px; margin-bottom:8px; font-family:'Space Grotesk'; font-size:18px; font-weight:600; }
-    .info-card { border:1px solid #fed6cc; background:#fff8f5; border-radius:14px; padding:15px 17px; line-height:1.55; color:#63352d; }
-    .note-card { border:1px solid #dbe5ef; background:#f3f7fb; border-radius:14px; padding:15px 17px; line-height:1.55; color:#29445d; }
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap');
+    :root { --ink:#111827; --muted:#64748b; --line:#e5e7eb; --accent:#e4573d; --navy:#18324a; }
+    html, body, [class*="css"] { font-family:'Noto Sans KR','DM Sans',sans-serif; }
+    h1, h2, h3, h4 { font-family:'Noto Sans KR','Space Grotesk',sans-serif; letter-spacing:-.035em; color:var(--ink); }
+    .stApp { background:linear-gradient(180deg,#f5f7f9 0,#fbfcfd 420px); color:var(--ink); }
+    .block-container { max-width:1440px; padding-top:2rem; padding-bottom:4rem; }
+    [data-testid="stSidebar"] { background:#102235; border-right:0; }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] *,
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] label * { color:#e8eef5 !important; }
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div * { color:#111827 !important; }
+    [data-testid="stSidebar"] .stRadio label { padding:.58rem .7rem; border-radius:.65rem; }
+    [data-testid="stSidebar"] .stRadio label:hover { background:rgba(255,255,255,.08); }
+    .brand { padding:.3rem 0 1.25rem; }
+    .brand-mark { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; background:#e4573d; color:white; border-radius:13px; font-size:23px; font-weight:700; margin-right:10px; box-shadow:0 8px 20px rgba(228,87,61,.28); }
+    .brand-name { font-family:'Space Grotesk'; font-weight:700; font-size:21px; color:white; vertical-align:middle; }
+    .sidebar-kicker { color:#94a9ba; font-size:11px; letter-spacing:.1em; text-transform:uppercase; margin:3px 0 9px; }
+    .eyebrow { color:#e4573d; text-transform:uppercase; letter-spacing:.13em; font-size:11px; font-weight:700; margin-bottom:.45rem; }
+    .hero { position:relative; overflow:hidden; background:linear-gradient(120deg,#18324a 0%,#214765 62%,#315d78 100%); color:white; border-radius:22px; padding:32px 34px; margin-bottom:22px; box-shadow:0 16px 42px rgba(24,50,74,.16); }
+    .hero:after { content:''; position:absolute; width:260px; height:260px; border:55px solid rgba(255,255,255,.055); border-radius:50%; right:-65px; top:-105px; }
+    .hero h1 { color:white; margin:0; max-width:880px; font-size:clamp(28px,3vw,40px); line-height:1.22; }
+    .hero p { color:#d9e4ed; max-width:850px; margin:.75rem 0 0; font-size:15px; line-height:1.7; }
+    .hero .tag { display:inline-block; background:rgba(255,255,255,.13); color:#f4f8fb; border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:6px 11px; margin-top:15px; margin-right:6px; font-size:12px; }
+    .metric-card { background:white; border:1px solid var(--line); border-radius:17px; padding:18px 19px; min-height:116px; box-shadow:0 6px 20px rgba(15,23,42,.04); }
+    .metric-label { color:#64748b; font-size:12px; font-weight:600; }
+    .metric-value { color:#111827; font-family:'Space Grotesk','Noto Sans KR'; font-size:29px; font-weight:700; margin-top:7px; }
+    .metric-delta { color:#e4573d; font-size:12px; margin-top:4px; line-height:1.4; }
+    .section-head { margin-top:8px; margin-bottom:16px; }
+    .section-head h1 { margin:.15rem 0 .35rem; font-size:31px; }
+    .section-head p { color:#64748b; margin:0; line-height:1.6; }
+    .section-label { margin-top:27px; margin-bottom:10px; font-size:19px; font-weight:700; letter-spacing:-.025em; }
+    .info-card, .note-card, .white-card { border-radius:15px; padding:16px 18px; line-height:1.6; height:100%; }
+    .info-card { border:1px solid #fed6cc; background:#fff8f5; color:#63352d; }
+    .note-card { border:1px solid #dbe5ef; background:#f3f7fb; color:#29445d; }
+    .white-card { border:1px solid #e5e7eb; background:white; color:#334155; box-shadow:0 5px 18px rgba(15,23,42,.025); }
+    .card-title { color:#111827; font-weight:700; margin-bottom:6px; }
+    .card-kicker { color:#e4573d; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .flow { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:8px 0 18px; }
+    .flow-step { background:white; border:1px solid #e5e7eb; border-radius:14px; padding:14px 12px; min-height:92px; }
+    .flow-num { color:#e4573d; font-family:'Space Grotesk'; font-weight:700; font-size:12px; }
+    .flow-title { color:#18324a; font-weight:700; margin-top:7px; font-size:13px; }
+    .flow-copy { color:#64748b; font-size:11px; margin-top:4px; line-height:1.4; }
     .risk-high { color:#b93827; background:#fff0ec; border:1px solid #ffc7ba; border-radius:999px; padding:5px 10px; font-weight:700; display:inline-block; }
     .risk-mid { color:#9a6413; background:#fff8e9; border:1px solid #f7dc9b; border-radius:999px; padding:5px 10px; font-weight:700; display:inline-block; }
     .risk-low { color:#267152; background:#edf9f3; border:1px solid #bce6d0; border-radius:999px; padding:5px 10px; font-weight:700; display:inline-block; }
-    div[data-testid="stDataFrame"] { border-radius:12px; overflow:hidden; }
-    .small-caption { color:var(--muted); font-size:12px; line-height:1.5; }
+    .action-card { background:white; border:1px solid #e5e7eb; border-top:4px solid #e4573d; border-radius:15px; padding:17px 18px; min-height:205px; box-shadow:0 6px 20px rgba(15,23,42,.035); }
+    .action-card.alt { border-top-color:#315d78; }
+    .action-rank { color:#e4573d; font-size:11px; font-weight:700; letter-spacing:.09em; }
+    .action-title { color:#18324a; font-weight:700; font-size:17px; margin:7px 0 9px; line-height:1.4; }
+    .action-row { color:#475569; font-size:12px; line-height:1.6; margin-top:6px; }
+    .strategy-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:10px 0 18px; }
+    .strategy-cell { background:#f8fafc; border:1px solid #e5e7eb; border-radius:13px; padding:13px 14px; }
+    .strategy-cell span { display:block; color:#64748b; font-size:10px; margin-bottom:5px; }
+    .strategy-cell b { color:#18324a; font-size:13px; line-height:1.45; }
+    div[data-testid="stDataFrame"] { border-radius:13px; overflow:hidden; border:1px solid #edf0f2; }
+    div[data-testid="stPlotlyChart"] { background:white; border:1px solid #edf0f2; border-radius:16px; padding:4px; box-shadow:0 5px 18px rgba(15,23,42,.025); }
+    [data-testid="stMetric"] { background:white; border:1px solid #e5e7eb; padding:14px 16px; border-radius:15px; }
+    .boundary { background:#fffdf8; border:1px solid #f2dfb4; border-left:4px solid #e8a23a; border-radius:13px; padding:14px 16px; line-height:1.6; color:#62491d; margin-top:18px; }
+    .small { color:#64748b; font-size:12px; line-height:1.55; }
+    @media (max-width:900px) {
+        .flow { grid-template-columns:repeat(2,1fr); }
+        .strategy-strip { grid-template-columns:repeat(2,1fr); }
+        .hero { padding:25px 23px; }
+        .block-container { padding-left:1rem; padding-right:1rem; }
+        .metric-card { padding:13px 11px; min-height:104px; }
+        .metric-label { font-size:10px; }
+        .metric-value { font-size:18px; white-space:nowrap; }
+        .metric-delta { font-size:9px; }
+    }
+    @media (max-width:620px) {
+        .flow { grid-template-columns:1fr; }
+        .strategy-strip { grid-template-columns:1fr; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 @st.cache_data(show_spinner=False)
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    return pd.read_csv(DATA_DIR / "train.csv"), pd.read_csv(DATA_DIR / "test.csv")
+def load_tables() -> dict:
+    tables = {"train": pd.read_csv(DATA_DIR / "train.csv"), "test": pd.read_csv(DATA_DIR / "test.csv")}
+    tables["metadata"] = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+    tables.update({name: pd.read_csv(path) for name, path in TABLE_PATHS.items()})
+    seed = pd.read_csv(SEED_STABILITY_PATH, header=[0, 1], index_col=0)
+    seed.columns = [f"{first}_{second}" for first, second in seed.columns]
+    tables["seed_stability"] = seed.reset_index(names="model")
+    tables["strategy_thresholds"] = derive_strategy_thresholds(tables["train"])
+    tables["strategy_queue"] = build_strategy_queue(
+        tables["test"],
+        tables["predictions"],
+        tables["strategy_thresholds"],
+        low_risk_threshold=float(tables["scenarios"]["threshold"].min()),
+        high_risk_threshold=float(tables["scenarios"]["threshold"].max()),
+    )
+    return tables
 
 
 @st.cache_resource(show_spinner=False)
-def load_model():
-    # Importing the module registers the serialized custom transformer class.
-    from src.features import MusicFeatureEngineer  # noqa: F401
-
-    return joblib.load(MODEL_PATH)
-
-
-@st.cache_data(show_spinner=False)
-def load_artifacts() -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, pd.DataFrame]:
-    comparison = pd.read_csv(ARTIFACT_DIR / "model_comparison.csv")
-    threshold = pd.read_csv(ARTIFACT_DIR / "threshold_sweep_validation.csv")
-    importance_path = ARTIFACT_DIR / "feature_importance.csv"
-    importance = pd.read_csv(importance_path) if importance_path.exists() else pd.DataFrame(columns=["feature", "importance", "rank"])
-    metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
-    predictions = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
-    return comparison, threshold, metadata, predictions, importance
+def load_model(expected_hash: str):
+    model_path = MODEL_PATH.resolve()
+    if not model_path.is_relative_to(ROOT.resolve()):
+        raise RuntimeError("허용된 프로젝트 폴더 밖의 모델은 로드할 수 없습니다.")
+    if not expected_hash or sha256(model_path) != expected_hash:
+        raise RuntimeError("모델 SHA-256이 메타데이터와 다릅니다. 파일 무결성을 확인해 주세요.")
+    # joblib/pickle은 코드 실행이 가능한 형식이므로 저장소 내부에서 검증된 파일만 로드한다.
+    return joblib.load(model_path)
 
 
-def safe_load():
-    required = [DATA_DIR / "train.csv", DATA_DIR / "test.csv", MODEL_PATH, METADATA_PATH]
+def load_workspace() -> tuple[dict, object]:
+    required = [DATA_DIR / "train.csv", DATA_DIR / "test.csv", MODEL_PATH, METADATA_PATH, SEED_STABILITY_PATH, *TABLE_PATHS.values()]
     missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
     if missing:
         st.error("필수 파일이 없습니다: " + ", ".join(missing))
         st.stop()
-    return load_data(), load_model(), load_artifacts()
+    tables = load_tables()
+    return tables, load_model(str(tables["metadata"].get("artifact_sha256", "")))
 
 
-def metric_card(label: str, value: str, sub: str = ""):
-    st.markdown(
-        f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div><div class="metric-delta">{sub}</div></div>',
-        unsafe_allow_html=True,
-    )
-
-
-def risk_level(probability: float, threshold: float) -> tuple[str, str]:
-    if probability >= threshold:
-        return "고위험", "risk-high"
-    if probability >= threshold * 0.65:
-        return "관찰", "risk-mid"
-    return "저위험", "risk-low"
-
-
-def plotly_theme(fig):
+def plot_style(fig: go.Figure, height: int = 390) -> go.Figure:
     fig.update_layout(
         template="plotly_white",
-        font=dict(family="DM Sans", color="#111827"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=45, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        font=dict(family="Noto Sans KR, DM Sans", color="#334155"),
+        colorway=[COLORS["navy"], COLORS["orange"], COLORS["green"], COLORS["amber"], COLORS["blue"]],
+        margin=dict(l=18, r=18, t=58, b=20),
+        height=height,
+        hoverlabel=dict(bgcolor="white"),
     )
     return fig
 
 
-def header(title: str, description: str):
-    st.markdown(f'<div class="eyebrow">PLAYLISTPRO / {title.upper()}</div>', unsafe_allow_html=True)
-    st.title(title)
-    st.caption(description)
-
-
-def overview_page(train: pd.DataFrame, test: pd.DataFrame, comparison: pd.DataFrame, metadata: dict, predictions: pd.DataFrame):
+def metric_card(label: str, value: str, sub: str = "") -> None:
     st.markdown(
-        '<div class="hero"><div class="eyebrow" style="color:#ffb3a4">MUSIC RETENTION INTELLIGENCE</div><h1>이탈 신호를 읽고, 다음 행동을 설계하세요.</h1><p>구독·결제·청취 행동을 한 화면에서 탐색하고, 데이터셋 라벨 기준 이탈 위험을 고객 단위로 확인하는 PlaylistPro 분석 workspace입니다.</p><span class="tag">Light mode · Model inference only · FN 우선</span></div>',
+        f'<div class="metric-card"><div class="metric-label">{html.escape(label)}</div>'
+        f'<div class="metric-value">{html.escape(value)}</div><div class="metric-delta">{html.escape(sub)}</div></div>',
         unsafe_allow_html=True,
     )
-    st.markdown('<div class="info-card"><b>해석 범위 안내</b><br>현재 파일에는 관측 기준일·해지일·30일 라벨 생성 규칙이 없습니다. 따라서 아래 확률은 <b>데이터셋의 churned 라벨 기준</b>이며, 실제 향후 30일 해지 확률로 확정 표시하지 않습니다.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">오늘의 데이터 snapshot</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        metric_card("학습 고객", f"{len(train):,}", "target 포함")
-    with c2:
-        metric_card("제공 test", f"{len(test):,}", "정답 없는 추론용")
-    with c3:
-        metric_card("관찰 이탈률", f"{train['churned'].mean():.1%}", "churned=1")
-    with c4:
-        metric_card("비교 모델", f"{len(comparison):,}개", "최종 모델 선정 완료")
 
-    st.markdown('<div class="section-label">핵심 신호</div>', unsafe_allow_html=True)
-    a, b, c = st.columns(3)
-    plan_rates = train.groupby("payment_plan")["churned"].mean()
-    type_rates = train.groupby("subscription_type")["churned"].mean().sort_values(ascending=False)
-    with a:
-        metric_card("결제주기 격차", f"{plan_rates.max() - plan_rates.min():+.1%}", f"{plan_rates.idxmax()} vs {plan_rates.idxmin()}")
-    with b:
-        metric_card("최고위험 요금제", f"{type_rates.iloc[0]:.1%}", f"{type_rates.index[0]} 관찰 이탈률")
-    with c:
-        metric_card("모델 Test PR-AUC", f"{comparison.iloc[0]['test_pr_auc']:.3f}", f"{comparison.iloc[0]['model']} 기준")
 
-    left, right = st.columns([1.05, 1])
-    with left:
-        st.markdown('<div class="section-label">Target 구성</div>', unsafe_allow_html=True)
-        counts = train["churned"].map({0: "Active", 1: "Churned"}).value_counts().reset_index()
-        counts.columns = ["status", "customers"]
-        fig = px.pie(counts, names="status", values="customers", hole=.62, color="status", color_discrete_map={"Active": "#315A7D", "Churned": "#E4573D"})
-        fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="#ffffff", width=2)))
-        st.plotly_chart(plotly_theme(fig), width="stretch")
-    with right:
-        st.markdown('<div class="section-label">제공 test의 예측 snapshot</div>', unsafe_allow_html=True)
-        thr = float(metadata["validation_threshold"])
-        bins = pd.cut(predictions["churn_probability"], bins=[-0.01, thr * 0.65, thr, (1 + thr) / 2, 1.0], labels=["Low", "Watch", "High", "Very high"])
-        risk_counts = bins.value_counts().sort_index().reset_index()
-        risk_counts.columns = ["risk_band", "customers"]
-        fig = px.bar(risk_counts, x="risk_band", y="customers", color="risk_band", color_discrete_sequence=["#8ac5a6", "#f2cb74", "#f19b78", "#d94a3a"])
-        fig.update_layout(showlegend=False, xaxis_title=None, yaxis_title="Customers")
-        st.plotly_chart(plotly_theme(fig), width="stretch")
-        st.markdown('<div class="small-caption">정답이 없는 test이므로 이 분포는 예측 결과 분포이며 실제 이탈률이 아닙니다.</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-label">운영자가 먼저 볼 인사이트</div>', unsafe_allow_html=True)
-    inquiries = train.groupby("customer_service_inquiries")["churned"].mean().sort_values(ascending=False)
-    st.dataframe(
-        pd.DataFrame(
-            [
-                ["구독 유형", str(type_rates.index[0]), f"{type_rates.iloc[0]:.1%}", "최고위험 요금제 — 전환·혜택 실험 1순위"],
-                ["구독 유형", str(type_rates.index[-1]), f"{type_rates.iloc[-1]:.1%}", "최저위험 요금제 — 유지 요인 벤치마크"],
-                ["상담 문의", str(inquiries.index[0]), f"{inquiries.iloc[0]:.1%}", "불만 신호와 이탈의 연관 — 상담 이슈 해결을 유지 활동에 연결"],
-                ["결제 주기", str(plan_rates.idxmax()), f"{plan_rates.max():.1%}", f"주기 간 격차 {plan_rates.max() - plan_rates.min():+.1%} — 연관성 점검"],
-            ],
-            columns=["관점", "세그먼트/필드", "관찰값", "다음 확인"],
-        ),
-        hide_index=True,
-        width="stretch",
+def section_header(kicker: str, title: str, description: str) -> None:
+    st.markdown(
+        f'<div class="section-head"><div class="eyebrow">{html.escape(kicker)}</div>'
+        f'<h1>{html.escape(title)}</h1><p>{html.escape(description)}</p></div>',
+        unsafe_allow_html=True,
     )
 
 
-def eda_page(train: pd.DataFrame):
-    header("Data Explorer", "각 입력 변수와 churned 라벨의 관계를 분포·이탈률·표본 수로 확인합니다.")
-    feature_options = [c for c in train.columns if c not in ["customer_id", "churned"]]
-    # Open on the strongest signal; payment_plan is now the weakest (spread 0.001).
-    default_column = "weekly_hours" if "weekly_hours" in feature_options else feature_options[0]
-    selected = st.selectbox("분석할 컬럼", feature_options, index=feature_options.index(default_column))
-    st.markdown('<div class="small-caption">모든 컬럼을 선택해 개별 target 관계를 확인할 수 있습니다. 그래프는 연관관계이며 인과관계가 아닙니다.</div>', unsafe_allow_html=True)
-    left, right = st.columns([1.45, 1])
+def card(title: str, body: str, kind: str = "white-card", kicker: str = "") -> None:
+    kicker_html = f'<div class="card-kicker">{html.escape(kicker)}</div>' if kicker else ""
+    st.markdown(
+        f'<div class="{kind}">{kicker_html}<div class="card-title">{html.escape(title)}</div>{body}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def boundary_note() -> None:
+    st.markdown(
+        '<div class="boundary"><b>근거의 범위</b><br>'
+        '성능·Threshold·Top-K·Lift·Decile은 저장된 5-Fold OOF 예측 근거입니다. 독립 외부 Holdout, '
+        '미래 이탈 기간, 캠페인 Uplift·ROI·인과효과를 검증한 결과가 아니며 실제 CRM 발송이나 고객 접촉을 실행하지 않습니다.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def selected_scenario(scenarios: pd.DataFrame, scenario_id: str) -> pd.Series:
+    found = scenarios.loc[scenarios["scenario_id"].eq(scenario_id)]
+    return found.iloc[0] if not found.empty else scenarios.iloc[0]
+
+
+def model_label(value: str) -> str:
+    return MODEL_KO.get(str(value), str(value))
+
+
+def project_summary_page(tables: dict, scenario: pd.Series) -> None:
+    train, test, metadata, targeting = tables["train"], tables["test"], tables["metadata"], tables["targeting"]
+    metrics = metadata["metrics"]["five_fold_oof"]
+    churn_rate = float(train["churned"].mean())
+    st.markdown(
+        '<div class="hero"><div class="eyebrow" style="color:#ffab97">RETENTION DECISION SYSTEM</div>'
+        '<h1>누구에게 어떤 유지 활동을 먼저 검토할 것인가?</h1>'
+        '<p>PlaylistPro의 고객 행동 인사이트와 최종 CatBoost 위험 점수를 연결해, 검토 대상 범위와 고객별 유지 활동 후보를 함께 선택하는 의사결정 화면입니다.</p>'
+        '<span class="tag">관측 타깃: churned</span><span class="tag">최종 모델: CatBoost</span><span class="tag">검증: 5-Fold OOF</span></div>',
+        unsafe_allow_html=True,
+    )
+    columns = st.columns(4)
+    values = [
+        ("학습 고객", f"{len(train):,}명", f"관측 이탈률 {churn_rate:.1%}"),
+        ("점수 산출 고객", f"{len(test):,}명", "정답 라벨이 없는 운영 후보"),
+        ("OOF PR-AUC", f"{metrics['pr_auc']:.4f}", "불균형 이탈 탐지 1차 선정 지표"),
+        ("현재 운영안", str(scenario["scenario_label"]), f"Threshold {float(scenario['threshold']):.2f}"),
+    ]
+    for column, value in zip(columns, values):
+        with column:
+            metric_card(*value)
+
+    st.markdown('<div class="section-label">결정까지의 한 줄 흐름</div>', unsafe_allow_html=True)
+    steps = [
+        ("01", "고객 인사이트", "청취·스킵·구독·문의"),
+        ("02", "Feature 검증", "log_numeric 채택"),
+        ("03", "8개 모델 비교", "동일 Fold·동일 조건"),
+        ("04", "정밀 검증", "OOF·Seed·Bootstrap"),
+        ("05", "운영 기준", "Recall·Precision·용량"),
+        ("06", "고객 전략", "우선순위·행동 후보·KPI"),
+    ]
+    flow = "".join(
+        f'<div class="flow-step"><div class="flow-num">{number}</div><div class="flow-title">{title}</div><div class="flow-copy">{copy}</div></div>'
+        for number, title, copy in steps
+    )
+    st.markdown(f'<div class="flow">{flow}</div>', unsafe_allow_html=True)
+
+    top30 = targeting.loc[targeting["top_percent"].eq(30)].iloc[0]
+    left, right = st.columns([1.15, 1])
     with left:
-        if selected == "signup_date" and not pd.api.types.is_numeric_dtype(train[selected]):
-            view = train.assign(signup_year=pd.to_datetime(train[selected]).dt.year).groupby("signup_year")["churned"].agg(["mean", "size"]).reset_index()
-            fig = px.bar(view, x="signup_year", y="mean", text=view["mean"].map(lambda x: f"{x:.1%}"), labels={"mean": "Churn rate", "signup_year": "Signup year"}, title="Signup cohort vs churn rate")
-            fig.update_traces(marker_color="#E4573D", textposition="outside")
-        elif pd.api.types.is_numeric_dtype(train[selected]):
-            view = train[[selected, "churned"]].copy()
-            view["label"] = view["churned"].map({0: "Active", 1: "Churned"})
-            fig = px.histogram(view, x=selected, color="label", marginal="box", barmode="overlay", opacity=.7, color_discrete_map={"Active": "#315A7D", "Churned": "#E4573D"}, title=f"{selected} distribution by churn label")
-        else:
-            rates = train.groupby(selected, dropna=False)["churned"].agg(["mean", "size"]).reset_index().sort_values("mean", ascending=True)
-            rates["label"] = rates["mean"].map(lambda x: f"{x:.1%}")
-            fig = px.bar(rates, x="mean", y=selected, text="label", orientation="h", title=f"{selected} vs churn rate", labels={"mean": "Churn rate"})
-            fig.update_traces(marker_color="#E4573D", textposition="outside")
-        st.plotly_chart(plotly_theme(fig), width="stretch")
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=float(top30["capture_rate"]) * 100,
+            number={"suffix": "%", "font": {"color": COLORS["navy"]}},
+            title={"text": "위험 점수 상위 30%의 관측 이탈 포착률"},
+            gauge={"axis": {"range": [0, 100]}, "bar": {"color": COLORS["orange"]}, "bgcolor": "#eef2f5"},
+        ))
+        st.plotly_chart(plot_style(fig, 310), width="stretch")
     with right:
-        st.markdown(f'<div class="section-label">{selected} quick read</div>', unsafe_allow_html=True)
-        if selected == "signup_date" and not pd.api.types.is_numeric_dtype(train[selected]):
-            dates = pd.to_datetime(train[selected])
-            st.metric("기간", f"{dates.min():%Y-%m-%d} → {dates.max():%Y-%m-%d}")
-            st.metric("고유 날짜", f"{dates.nunique():,}")
-            st.warning("snapshot/해지일이 없어 30일 해지 변수로 사용할 수 없습니다.")
-        elif pd.api.types.is_numeric_dtype(train[selected]):
-            corr = train[[selected, "churned"]].corr().iloc[0, 1]
-            st.metric("Pearson correlation", f"{corr:+.4f}")
-            st.metric("중앙값", f"{train[selected].median():,.3f}")
-            st.metric("범위", f"{train[selected].min():,.3f} ~ {train[selected].max():,.3f}")
-        else:
-            grouped = train.groupby(selected)["churned"].agg(["mean", "size"])
-            st.metric("범주 수", f"{grouped.shape[0]:,}")
-            st.metric("최고 이탈률", f"{grouped['mean'].max():.1%}")
-            st.metric("최저 이탈률", f"{grouped['mean'].min():.1%}")
-
-    st.markdown('<div class="section-label">전체 컬럼 관계 요약</div>', unsafe_allow_html=True)
-    summary_rows = []
-    for column in feature_options:
-        if column == "signup_date" and not pd.api.types.is_numeric_dtype(train[column]):
-            series = pd.to_datetime(train[column])
-            summary_rows.append([column, "date", f"{series.min():%Y-%m-%d} ~ {series.max():%Y-%m-%d}", "cohort only", "30일 라벨 미검증"])
-        elif pd.api.types.is_numeric_dtype(train[column]):
-            corr = train[[column, "churned"]].corr().iloc[0, 1]
-            summary_rows.append([column, "numeric", f"corr {corr:+.4f}", f"median {train[column].median():,.2f}", "association"])
-        else:
-            rates = train.groupby(column)["churned"].mean()
-            summary_rows.append([column, "categorical", f"max {rates.max():.1%}", f"min {rates.min():.1%}", "association"])
-    st.dataframe(pd.DataFrame(summary_rows, columns=["컬럼", "타입", "핵심 신호", "분포/범위", "해석"]), hide_index=True, width="stretch")
-
-
-def model_page(comparison: pd.DataFrame, threshold: pd.DataFrame, metadata: dict, importance: pd.DataFrame):
-    header("Model Lab", "후보 모델 성능과 FN 우선 threshold trade-off를 확인합니다. Gradient Boosting을 최종 모델로 선정했습니다.")
-    best = comparison.iloc[0]
-    st.markdown(f'<div class="note-card"><b>최종 선정 모델: {best["model"]}</b><br>Validation expected cost 기준으로 최종 선정했습니다. 비용비 FN:FP={metadata.get("false_negative_cost", 3):g}:1과 운영 threshold는 팀 가정이며 실제 사업 수치로 재검토해야 합니다.</div>', unsafe_allow_html=True)
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: metric_card("Test PR-AUC", f"{best['test_pr_auc']:.3f}", "ranking quality")
-    with m2: metric_card("Test Recall", f"{best['test_operating_recall']:.1%}", "operating threshold")
-    with m3: metric_card("Test Precision", f"{best['test_operating_precision']:.1%}", "operating threshold")
-    with m4: metric_card("Threshold", f"{best['validation_operating_threshold']:.2f}", "Validation 선택값")
-
-    left, right = st.columns([1.1, 1])
-    with left:
-        display = comparison[["model", "validation_pr_auc", "test_pr_auc", "validation_operating_recall", "test_operating_recall", "test_operating_precision", "test_expected_cost_per_customer"]].copy()
-        display.columns = ["model", "Val PR-AUC", "Test PR-AUC", "Val Recall", "Test Recall", "Test Precision", "Test cost/customer"]
-        st.markdown('<div class="section-label">후보 비교</div>', unsafe_allow_html=True)
-        st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns if c != "model"}), hide_index=True, width="stretch")
-    with right:
-        chart_df = comparison.sort_values("test_pr_auc")
-        fig = go.Figure()
-        fig.add_trace(go.Bar(name="PR-AUC", x=chart_df["test_pr_auc"], y=chart_df["model"], orientation="h", marker_color="#315A7D"))
-        fig.update_layout(title="Test PR-AUC", xaxis_title="PR-AUC", yaxis_title=None, showlegend=False)
-        st.plotly_chart(plotly_theme(fig), width="stretch")
-
-    if not importance.empty:
-        st.markdown('<div class="section-label">Model interpretation</div>', unsafe_allow_html=True)
-        top = importance.head(12).sort_values("importance")
-        fig = go.Figure(go.Bar(x=top["importance"], y=top["feature"], orientation="h", marker_color="#e4573d"))
-        fig.update_layout(title="Top encoded feature importance", xaxis_title="Importance", yaxis_title=None, height=430, showlegend=False)
-        st.plotly_chart(plotly_theme(fig), width="stretch")
-        st.markdown('<div class="small-caption">Importance는 Gradient Boosting의 모델 내부 연관 신호입니다. 원인·효과나 캠페인 효과를 의미하지 않으며, 범주형 값은 one-hot 인코딩된 상태로 표시됩니다.</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-label">Threshold trade-off</div>', unsafe_allow_html=True)
-    curve = threshold.copy()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["recall"], name="Recall", line=dict(color="#E4573D", width=3)))
-    fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["precision"], name="Precision", line=dict(color="#315A7D", width=3)))
-    fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["expected_cost_per_customer"], name="Expected cost/customer", line=dict(color="#8a6f2f", dash="dot")))
-    fig.update_layout(title="Validation threshold curve", xaxis_title="Threshold", yaxis_title="Metric / cost", yaxis_range=[0, 1])
-    st.plotly_chart(plotly_theme(fig), width="stretch")
-    st.markdown('<div class="small-caption">Threshold가 낮아지면 Recall은 보통 올라가지만 FP도 늘어납니다. 현재 비용비 3:1은 팀 가정이며, 운영 수용량과 실제 FN/FP 비용으로 재설정해야 합니다.</div>', unsafe_allow_html=True)
-
-    with st.expander("모델 한계와 데이터 리스크"):
-        st.markdown("""
-        - 현재 Test는 내부 분할 Test이며, 제공 `data/test.csv`는 정답이 없어 실제 성능을 검증하지 못합니다.
-        - `churned`가 향후 30일 내 해지를 뜻한다는 생성 규칙이 확인되지 않았습니다.
-        - 성능이 낮거나 특정 세그먼트에서 달라질 수 있으므로 자동 할인·차단에 사용하지 않습니다.
-        - 변수 중요도는 곧바로 해지 원인이나 캠페인 효과를 의미하지 않습니다.
-        """)
-
-
-def prediction_page(train: pd.DataFrame, model, metadata: dict):
-    header("Customer Scoring", "고객 정보를 입력하면 저장된 Pipeline이 이탈 위험 점수와 리텐션 확인 포인트를 반환합니다.")
-    threshold = float(metadata["validation_threshold"])
-    st.markdown(f'<div class="note-card"><b>모델 실행 방식</b><br>최종 선정된 `{metadata["model"]}` Pipeline만 로드합니다. 현재 threshold는 `{threshold:.2f}`이며 FN:FP 비용비 `{metadata.get("false_negative_cost", 3):g}:1` 기준의 팀 가정값입니다.</div>', unsafe_allow_html=True)
-
-    with st.form("customer_form"):
-        st.markdown('<div class="section-label">Subscription & profile</div>', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            age = st.number_input("Age", min_value=18, max_value=100, value=int(train.age.median()), step=1)
-            location = st.selectbox("Location", sorted(train.location.unique()), index=sorted(train.location.unique()).index("California") if "California" in train.location.unique() else 0)
-            subscription_type = st.selectbox("Subscription type", sorted(train.subscription_type.unique()))
-        with c2:
-            payment_plan = st.selectbox("Payment plan", sorted(train.payment_plan.unique()))
-            pause_value = st.selectbox("num_subscription_pauses (실제 값)", sorted(train.num_subscription_pauses.unique()))
-            payment_method = st.selectbox("Payment method", sorted(train.payment_method.unique()))
-        with c3:
-            customer_service = st.selectbox("Customer service inquiries", sorted(train.customer_service_inquiries.unique()))
-            if pd.api.types.is_numeric_dtype(train.signup_date):
-                signup_date = st.number_input(
-                    "Signup date (기준일 대비 일수)",
-                    min_value=int(train.signup_date.min()),
-                    max_value=int(train.signup_date.max()),
-                    value=int(train.signup_date.median()),
-                    step=1,
-                )
-            else:
-                signup_default = pd.to_datetime(train.signup_date).median().date()
-                signup_date = st.date_input("Signup date", value=signup_default)
-            st.caption("가입 시점은 파생 feature로만 사용됩니다.")
-
-        st.markdown('<div class="section-label">Listening behavior</div>', unsafe_allow_html=True)
-        numeric_cols = ["weekly_hours", "average_session_length", "song_skip_rate", "weekly_songs_played", "weekly_unique_songs", "num_favorite_artists", "num_platform_friends", "num_playlists_created", "num_shared_playlists", "notifications_clicked"]
-        defaults = {c: float(train[c].median()) for c in numeric_cols}
-        caps = {c: float(train[c].max()) * 1.5 for c in numeric_cols}
-        row1 = st.columns(5)
-        weekly_hours = row1[0].number_input("Weekly hours", min_value=0.0, max_value=caps["weekly_hours"], value=defaults["weekly_hours"], step=0.1)
-        avg_session = row1[1].number_input("Avg session length", min_value=0.0, max_value=caps["average_session_length"], value=defaults["average_session_length"], step=0.05)
-        skip_rate = row1[2].number_input("Song skip rate", min_value=0.0, max_value=1.0, value=defaults["song_skip_rate"], step=0.01)
-        songs = row1[3].number_input("Weekly songs played", min_value=0, max_value=int(caps["weekly_songs_played"]), value=int(defaults["weekly_songs_played"]), step=1)
-        unique_songs = row1[4].number_input("Weekly unique songs", min_value=0, max_value=int(caps["weekly_unique_songs"]), value=int(defaults["weekly_unique_songs"]), step=1)
-        row2 = st.columns(5)
-        favorites = row2[0].number_input("Favorite artists", min_value=0, max_value=int(caps["num_favorite_artists"]), value=int(defaults["num_favorite_artists"]), step=1)
-        friends = row2[1].number_input("Platform friends", min_value=0, max_value=int(caps["num_platform_friends"]), value=int(defaults["num_platform_friends"]), step=1)
-        playlists = row2[2].number_input("Playlists created", min_value=0, max_value=int(caps["num_playlists_created"]), value=int(defaults["num_playlists_created"]), step=1)
-        shared = row2[3].number_input("Shared playlists", min_value=0, max_value=int(caps["num_shared_playlists"]), value=int(defaults["num_shared_playlists"]), step=1)
-        notifications = row2[4].number_input("Notifications clicked", min_value=0, max_value=int(caps["notifications_clicked"]), value=int(defaults["notifications_clicked"]), step=1)
-        submitted = st.form_submit_button("이 고객의 위험 점수 계산", type="primary", width="stretch")
-
-    if submitted:
-        row = pd.DataFrame(
-            [{
-                "customer_id": -1,
-                "age": age,
-                "location": location,
-                "subscription_type": subscription_type,
-                "payment_plan": payment_plan,
-                "num_subscription_pauses": pause_value,
-                "payment_method": payment_method,
-                "customer_service_inquiries": customer_service,
-                "signup_date": signup_date,
-                "weekly_hours": weekly_hours,
-                "average_session_length": avg_session,
-                "song_skip_rate": skip_rate,
-                "weekly_songs_played": songs,
-                "weekly_unique_songs": unique_songs,
-                "num_favorite_artists": favorites,
-                "num_platform_friends": friends,
-                "num_playlists_created": playlists,
-                "num_shared_playlists": shared,
-                "notifications_clicked": notifications,
-            }]
+        st.markdown('<div class="section-label" style="margin-top:4px">현재 화면이 지원하는 결정</div>', unsafe_allow_html=True)
+        card(
+            "사용자가 직접 정하는 것",
+            f"검토 용량과 누락 비용을 보고 <b>{html.escape(str(scenario['scenario_label']))}</b> 등 Threshold 시나리오를 선택합니다. 현재 선택은 OOF 기준 약 <b>{float(scenario['oof_target_rate']):.1%}</b>를 검토합니다.",
+            "info-card",
+            "HUMAN DECISION",
         )
-        probability = float(model.predict_proba(row)[:, 1][0])
-        level, css = risk_level(probability, threshold)
-        st.markdown('<div class="section-label">Scoring result</div>', unsafe_allow_html=True)
-        r1, r2, r3 = st.columns(3)
-        with r1: metric_card("Dataset-label churn probability", f"{probability:.1%}", "model score")
-        with r2:
-            st.markdown(f'<div class="metric-card"><div class="metric-label">Risk level</div><div class="metric-value"><span class="{css}">{level}</span></div><div class="metric-delta">threshold {threshold:.2f}</div></div>', unsafe_allow_html=True)
-        with r3: metric_card("Decision", "우선 검토" if probability >= threshold else "일반 모니터링", "자동 조치 아님")
-        st.markdown('<div class="section-label">리텐션 검토 포인트</div>', unsafe_allow_html=True)
-        actions = []
-        type_rates_all = train.groupby("subscription_type")["churned"].mean()
-        if float(type_rates_all.get(subscription_type, 0)) >= train["churned"].mean() * 1.2:
-            actions.append(f"{subscription_type} 요금제: 평균 대비 높은 이탈 세그먼트 — 전환·혜택 실험 후보")
-        try:
-            if float(pause_value) >= 3:
-                actions.append("구독 일시정지 3회 이상: 해지 전 행동 신호 — 우선 접촉 후보")
-        except (TypeError, ValueError):
-            pass
-        inquiry_rates = train.groupby("customer_service_inquiries")["churned"].mean()
-        if float(inquiry_rates.get(customer_service, 0)) >= train["churned"].mean() * 1.2:
-            actions.append("상담 문의 상위 구간: 불만 이슈 해결을 유지 활동 1순위로")
-        if skip_rate >= train.song_skip_rate.quantile(.75): actions.append("높은 skip rate: 개인화 추천·탐색 경험의 추가 진단 후보")
-        if weekly_hours <= train.weekly_hours.quantile(.25): actions.append("낮은 주간 청취: 재활성화 메시지·콘텐츠 추천 실험 후보")
-        if not actions: actions.append("현재 입력만으로는 강한 단일 신호가 없으므로 전체 세그먼트 맥락과 함께 검토")
-        for action in actions:
-            st.markdown(f"- {action}")
-        st.caption("위 내용은 예측 신호에 기반한 실험 후보이며, 해지 원인·캠페인 효과를 의미하지 않습니다.")
+        st.write("")
+        card(
+            "시스템이 제공하는 것",
+            "검증된 모델 로드, 위험 점수 재계산, 고객 순위·행동 후보·KPI·전략 CSV를 제공합니다. 캠페인 실행과 할인 적용은 포함하지 않습니다.",
+            "note-card",
+            "SYSTEM SUPPORT",
+        )
+    boundary_note()
 
 
-def batch_page(predictions: pd.DataFrame, metadata: dict):
-    header("Batch Prioritization", "정답이 없는 제공 test 고객의 예측 분포와 우선 검토 대상을 확인합니다.")
-    threshold = float(metadata["validation_threshold"])
-    min_probability = st.slider("최소 이탈 확률", 0.0, 1.0, threshold, 0.01)
-    filtered = predictions[predictions["churn_probability"] >= min_probability].sort_values("churn_probability", ascending=False)
+def customer_insights_page(tables: dict) -> None:
+    train = tables["train"]
+    section_header("CUSTOMER INSIGHT", "고객 행동에서 무엇을 관찰했는가", "연관성을 서비스 개선 가설로 바꾸되, 인과효과로 과장하지 않습니다.")
+
+    missing = int(train.isna().sum().sum())
+    duplicate_rows = int(train.duplicated().sum())
+    duplicate_ids = int(train["customer_id"].duplicated().sum())
+    id_overlap = len(set(train["customer_id"]).intersection(set(tables["test"]["customer_id"])))
+    for column, item in zip(st.columns(4), [
+        ("관측 이탈 고객", f"{int(train['churned'].sum()):,}명", f"전체의 {train['churned'].mean():.1%}"),
+        ("결측 셀", f"{missing:,}개", "입력 데이터 품질 점검"),
+        ("중복 행 / ID", f"{duplicate_rows:,} / {duplicate_ids:,}", "학습 표본 중복 확인"),
+        ("Train-Test ID 중첩", f"{id_overlap:,}명", "고객 단위 겹침 확인"),
+    ]):
+        with column:
+            metric_card(*item)
+
+    feature_options = {
+        "주간 청취시간": ("weekly_hours", "numeric"),
+        "스킵률": ("song_skip_rate", "numeric"),
+        "구독 유형": ("subscription_type", "categorical"),
+        "고객 문의 수준": ("customer_service_inquiries", "categorical"),
+        "구독 일시정지 횟수": ("num_subscription_pauses", "numeric"),
+    }
+    left, right = st.columns([1.15, 1])
+    with left:
+        choice = st.selectbox("살펴볼 고객 행동", list(feature_options))
+        feature, kind = feature_options[choice]
+        if kind == "numeric":
+            grouped = train.assign(구간=pd.qcut(train[feature], 4, duplicates="drop")).groupby("구간", observed=True).agg(
+                고객수=("churned", "size"), 관측이탈률=("churned", "mean")
+            ).reset_index()
+            grouped["구간"] = grouped["구간"].astype(str)
+        else:
+            grouped = train.groupby(feature, observed=True).agg(고객수=("churned", "size"), 관측이탈률=("churned", "mean")).reset_index()
+            grouped = grouped.rename(columns={feature: "구간"}).sort_values("관측이탈률", ascending=False)
+        fig = px.bar(grouped, x="구간", y="관측이탈률", text=grouped["관측이탈률"].map(lambda x: f"{x:.1%}"), custom_data=["고객수"])
+        fig.update_traces(marker_color=COLORS["orange"], hovertemplate="%{x}<br>관측 이탈률 %{y:.1%}<br>고객 %{customdata[0]:,}명<extra></extra>")
+        fig.update_layout(title=f"{choice}별 관측 이탈률", yaxis_tickformat=".0%", xaxis_title=None, yaxis_title="관측 이탈률")
+        st.plotly_chart(plot_style(fig), width="stretch")
+    with right:
+        importance = tables["importance"].head(12).sort_values("importance")
+        fig = px.bar(importance, x="importance", y="feature", orientation="h", text=importance["importance"].map(lambda x: f"{x:.1f}"))
+        fig.update_traces(marker_color=COLORS["navy"])
+        fig.update_layout(title="CatBoost 전역 Feature 중요도", xaxis_title="중요도", yaxis_title=None)
+        st.plotly_chart(plot_style(fig), width="stretch")
+
+    st.markdown('<div class="section-label">관찰을 실행 가능한 가설로 번역</div>', unsafe_allow_html=True)
+    insight_cards = [
+        ("낮은 청취·높은 스킵", "청취시간과 스킵률 구간에서 관측 이탈률 차이가 나타났습니다.", "추천 적합도와 콘텐츠 발견 경험을 진단합니다.", "시간 순서가 없어 원인으로 단정할 수 없습니다."),
+        ("Free 구독 유형", "Free 고객군의 관측 이탈률이 상대적으로 높습니다.", "혜택 인지와 전환 제안을 별도 실험합니다.", "할인·오퍼 효과는 아직 검증되지 않았습니다."),
+        ("고객 문의 수준", "문의 수준은 모델의 주요 분류 신호입니다.", "해결 속도와 반복 문의 원인을 점검합니다.", "문의가 이탈을 만든다는 인과 근거는 아닙니다."),
+    ]
+    for column, (title, observation, action, limit) in zip(st.columns(3), insight_cards):
+        with column:
+            card(title, f"<b>관찰</b> · {observation}<br><b>활용 가설</b> · {action}<br><span class='small'><b>한계</b> · {limit}</span>", "white-card", "INSIGHT")
+    boundary_note()
+
+
+def improvement_page(tables: dict) -> None:
+    section_header("EXPERIMENT STORY", "무엇을 바꾸었고, 성능은 어떻게 달라졌는가", "채택한 실험뿐 아니라 제외한 실험도 동일한 평가 근거로 보여줍니다.")
+    prep = tables["preprocessing_results"].copy()
+    raw_pr = float(prep.loc[prep["variant"].eq("raw"), "pr_auc"].iloc[0])
+    prep["PR-AUC 변화"] = prep["pr_auc"] - raw_pr
+    prep["결정"] = np.where(prep["variant"].eq("log_numeric"), "채택", "제외")
+    prep_labels = {
+        "raw": "Raw 기준",
+        "plus1_ratios": "+1 비율",
+        "zero_aware_ratios": "0 인지 비율",
+        "log_numeric": "수치 로그 변환",
+        "interaction": "상호작용",
+        "signal_pruned": "신호 축소",
+    }
+    prep["실험"] = prep["variant"].map(prep_labels)
+    left, right = st.columns([1.15, 1])
+    with left:
+        fig = px.bar(prep, x="실험", y="pr_auc", color="결정", text=prep["pr_auc"].map(lambda x: f"{x:.4f}"),
+                     color_discrete_map={"채택": COLORS["orange"], "제외": "#a8b4bf"})
+        fig.update_layout(title="1차 Feature 가공 검증 · Logistic OOF", yaxis_range=[0.895, 0.91], yaxis_title="PR-AUC", xaxis_title=None)
+        st.plotly_chart(plot_style(fig), width="stretch")
+        st.caption("Logistic은 최종 후보가 아니라 변환 효과를 같은 조건에서 빠르게 비교한 고정 검증기입니다. CatBoost 재확인에서도 log_numeric이 가장 높았지만 Raw와 차이는 매우 작았습니다. 공통 Feature 결정 근거이지 전체 성능 향상의 주된 원인으로 과장하지 않습니다.")
+    with right:
+        card("문제 관찰", "횟수·시간 변수의 긴 꼬리가 선형 기준 모델에서 신호를 압축할 수 있었습니다.", "note-card", "01 OBSERVE")
+        st.write("")
+        card("가설과 결과", f"로그 변환이 순서 신호를 보존하며 분포를 완화할 것으로 가정했습니다. PR-AUC는 <b>{raw_pr:.4f} → {prep['pr_auc'].max():.4f}</b>로 개선됐습니다.", "info-card", "02 TEST")
+        st.write("")
+        card(
+            "결정",
+            "로그와 비율 Feature를 결합한 log_numeric을 공통 Feature로 채택했습니다. "
+            "단독 비율 variant와 상호작용·신호 축소안은 추가 개선이 없어 제외했습니다.",
+            "white-card",
+            "03 DECIDE",
+        )
+
+    st.markdown('<div class="section-label">동일 조건 8개 모델과 탐색 전후</div>', unsafe_allow_html=True)
+    comparison = tables["comparison"].copy()
+    comparison["모델"] = comparison["model"].map(model_label)
+    comparison = comparison.sort_values("pr_auc", ascending=False)
+    random_search = tables["random_search"][["model", "pr_auc"]].rename(columns={"pr_auc": "탐색 후"})
+    before_after = comparison[["model", "pr_auc"]].rename(columns={"pr_auc": "기본 비교"}).merge(random_search, on="model", how="inner")
+    before_after["모델"] = before_after["model"].map(model_label)
+    a, b = st.columns([1.15, 1])
+    with a:
+        fig = px.bar(comparison, x="모델", y="pr_auc", color=np.where(comparison["model"].eq("catboost"), "최종 선정", "비교 후보"),
+                     text=comparison["pr_auc"].map(lambda x: f"{x:.4f}"), color_discrete_map={"최종 선정": COLORS["orange"], "비교 후보": COLORS["navy"]})
+        fig.update_layout(title="동일 Feature · 동일 5-Fold OOF 모델 비교", yaxis_range=[0.5, 0.97], yaxis_title="PR-AUC", xaxis_title=None, showlegend=False)
+        st.plotly_chart(plot_style(fig), width="stretch")
+    with b:
+        long = before_after.melt(id_vars="모델", value_vars=["기본 비교", "탐색 후"], var_name="단계", value_name="PR-AUC")
+        fig = px.line(long, x="단계", y="PR-AUC", color="모델", markers=True)
+        fig.update_layout(title="Random Search 전후", yaxis_range=[0.92, 0.952], legend_title=None)
+        st.plotly_chart(plot_style(fig), width="stretch")
+
+    display = prep[["실험", "pr_auc", "PR-AUC 변화", "recall", "precision", "fn", "fp", "결정"]].rename(columns={
+        "pr_auc": "PR-AUC", "recall": "Recall", "precision": "Precision", "fn": "FN", "fp": "FP"
+    })
+    with st.expander("채택·제외 실험 전체 표"):
+        st.dataframe(display.style.format({"PR-AUC": "{:.6f}", "PR-AUC 변화": "{:+.6f}", "Recall": "{:.1%}", "Precision": "{:.1%}"}), hide_index=True, width="stretch")
+    boundary_note()
+
+
+def model_comparison_page(tables: dict) -> None:
+    section_header("MODEL DECISION", "왜 최종 모델은 CatBoost인가", "단일 점수만 보지 않고 PR-AUC, 오류 균형, Seed 안정성, Bootstrap 불확실성을 함께 판단했습니다.")
+    fine = tables["fine_tuning"].sort_values("best_cv_pr_auc", ascending=False).copy()
+    fine["모델"] = fine["model"].map(model_label)
+    winner = fine.iloc[0]
+    runner_up = fine.iloc[1]
+    gap = float(winner["best_cv_pr_auc"] - runner_up["best_cv_pr_auc"])
+    for column, item in zip(st.columns(4), [
+        ("최종 선정", "CatBoost", "상위 3개 정밀 탐색 1위"),
+        ("Fine CV PR-AUC", f"{float(winner['best_cv_pr_auc']):.6f}", f"차선 대비 +{gap:.6f}"),
+        ("5-Seed 평균", f"{float(tables['seed_stability'].iloc[0]['pr_auc_mean']):.6f}", f"표준편차 {float(tables['seed_stability'].iloc[0]['pr_auc_std']):.6f}"),
+        ("OOF PR-AUC", f"{float(winner['pr_auc']):.6f}", "저장된 전체 OOF 예측"),
+    ]):
+        with column:
+            metric_card(*item)
+
+    left, right = st.columns([1.15, 1])
+    with left:
+        metric_long = fine.melt(id_vars=["모델"], value_vars=["recall", "precision", "f1"], var_name="지표", value_name="값")
+        metric_long["지표"] = metric_long["지표"].map({"recall": "Recall", "precision": "Precision", "f1": "F1"})
+        fig = px.bar(metric_long, x="모델", y="값", color="지표", barmode="group", text=metric_long["값"].map(lambda x: f"{x:.3f}"))
+        fig.update_layout(title="상위 3개 모델의 기본 Threshold 오류 균형", yaxis_range=[0.78, 0.9], yaxis_tickformat=".0%", xaxis_title=None)
+        st.plotly_chart(plot_style(fig), width="stretch")
+    with right:
+        boot = tables["bootstrap"].query("metric == 'pr_auc'").copy()
+        boot["모델"] = boot["model"].map(model_label)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=boot["estimate"], y=boot["모델"], mode="markers", marker={"size": 11, "color": COLORS["orange"]},
+            error_x={"type": "data", "symmetric": False, "array": boot["ci_high"] - boot["estimate"], "arrayminus": boot["estimate"] - boot["ci_low"]},
+        ))
+        fig.update_layout(title="Bootstrap PR-AUC 95% 신뢰구간", xaxis_title="PR-AUC", yaxis_title=None)
+        st.plotly_chart(plot_style(fig), width="stretch")
+
+    st.markdown('<div class="section-label">선정 논리와 트레이드오프</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    with c1: metric_card("전체 test", f"{len(predictions):,}", "정답 없음")
-    with c2: metric_card("현재 대상", f"{len(filtered):,}", f"probability ≥ {min_probability:.2f}")
-    with c3: metric_card("비율", f"{len(filtered) / len(predictions):.1%}", "예측 대상 비중")
-    st.markdown('<div class="info-card"><b>주의</b><br>제공 test에는 정답이 없으므로 고위험 고객 목록의 정확도나 실제 유지 효과는 여기서 검증할 수 없습니다. 운영 전에는 라벨과 캠페인 결과를 연결해야 합니다.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">우선 검토 고객</div>', unsafe_allow_html=True)
-    view = filtered.head(500).copy()
-    view["risk"] = np.where(view["churn_probability"] >= threshold, "High", "Watch")
-    st.dataframe(view, hide_index=True, width="stretch")
-    st.download_button("현재 필터 결과 CSV 다운로드", data=filtered.to_csv(index=False).encode("utf-8-sig"), file_name="playlistpro_churn_priorities.csv", mime="text/csv", width="stretch")
+    with c1:
+        card("1. 불균형 타깃에 맞는 1차 기준", "Accuracy가 아니라 <b>PR-AUC</b>를 1차 선정 지표로 사용했습니다. 이탈 고객 탐지 성능을 Recall·FN과 함께 봅니다.", "white-card", "METRIC")
+    with c2:
+        card("2. 점수 차이는 작다", f"CatBoost와 차선 후보의 Fine CV PR-AUC 차이는 <b>{gap:.6f}</b>입니다. 압도적 우위가 아니라 정해진 규칙에서의 근소한 1위입니다.", "info-card", "HONESTY")
+    with c3:
+        card("3. 운영 기준은 별도", "LightGBM은 기본 Threshold에서 Recall·F1이 더 높을 수 있습니다. 그러나 모델 선정과 Threshold 선택을 분리해 CatBoost 확률에 운영 기준을 적용합니다.", "note-card", "TRADE-OFF")
+
+    comparison = tables["comparison"].copy()
+    comparison["모델"] = comparison["model"].map(model_label)
+    with st.expander("8개 모델 동일 조건 상세 지표"):
+        cols = ["모델", "pr_auc", "roc_auc", "f1", "recall", "precision", "fn", "fp", "seconds"]
+        st.dataframe(comparison[cols].sort_values("pr_auc", ascending=False).style.format({
+            "pr_auc": "{:.6f}", "roc_auc": "{:.6f}", "f1": "{:.1%}", "recall": "{:.1%}", "precision": "{:.1%}", "seconds": "{:.1f}초"
+        }), hide_index=True, width="stretch")
+    with st.expander("Calibration 진단"):
+        calibration = tables["calibration"].copy()
+        calibration["모델"] = calibration["model"].map(model_label)
+        st.dataframe(calibration[["모델", "brier", "mean_abs_calibration_gap"]].style.format({"brier": "{:.6f}", "mean_abs_calibration_gap": "{:.6f}"}), hide_index=True, width="stretch")
+    boundary_note()
 
 
-def simulator_page(test: pd.DataFrame, predictions: pd.DataFrame, metadata: dict):
-    header("Campaign Simulator", "예산·인원·상위 % 중 원하는 기준으로 캠페인 규모를 정하면, 고객별 예측 확률 순위로 기대 효과를 계산합니다.")
+def operations_page(tables: dict, scenario: pd.Series) -> None:
+    section_header("OPERATING POLICY", "누락과 접촉 비용 사이의 기준을 선택하세요", "모델은 고객 순위를 제공하고, 사용자는 검토 용량과 FN 비용에 맞춰 Threshold를 선택합니다.")
+    for column, item in zip(st.columns(5), [
+        ("선택 시나리오", str(scenario["scenario_label"]), f"Threshold {float(scenario['threshold']):.2f}"),
+        ("검토 대상", f"{int(scenario['oof_target_customers']):,}명", f"OOF 표본의 {float(scenario['oof_target_rate']):.1%}"),
+        ("Recall", f"{float(scenario['oof_recall']):.1%}", f"FN {int(scenario['oof_fn']):,}명"),
+        ("Precision", f"{float(scenario['oof_precision']):.1%}", f"FP {int(scenario['oof_fp']):,}명"),
+        ("F1", f"{float(scenario['oof_f1']):.1%}", str(scenario["selection_rule"])),
+    ]):
+        with column:
+            metric_card(*item)
+
+    sweep = tables["threshold_sweep"].copy()
+    left, right = st.columns([1.25, 1])
+    with left:
+        fig = go.Figure()
+        for column, label, color in [("oof_recall", "Recall", COLORS["orange"]), ("oof_precision", "Precision", COLORS["navy"]), ("oof_f1", "F1", COLORS["green"])]:
+            fig.add_trace(go.Scatter(x=sweep["threshold"], y=sweep[column], name=label, mode="lines", line={"width": 3, "color": color}))
+        fig.add_vline(x=float(scenario["threshold"]), line_dash="dash", line_color=COLORS["amber"], annotation_text="현재 선택")
+        fig.update_layout(title="Threshold에 따른 OOF 지표 변화", xaxis_title="Threshold", yaxis_title="지표", yaxis_tickformat=".0%", legend_orientation="h")
+        st.plotly_chart(plot_style(fig), width="stretch")
+    with right:
+        scenarios = tables["scenarios"].copy()
+        fig = px.scatter(scenarios, x="oof_target_rate", y="oof_recall", size="oof_fp", color="scenario_label", text="scenario_label", hover_data=["oof_precision", "oof_fn"])
+        fig.update_traces(textposition="top center")
+        fig.update_layout(title="검토 범위와 이탈 포착의 균형", xaxis_tickformat=".0%", yaxis_tickformat=".0%", xaxis_title="검토 대상 비율", yaxis_title="Recall", showlegend=False)
+        st.plotly_chart(plot_style(fig), width="stretch")
+
+    st.markdown('<div class="section-label">용량 기반 우선순위 진단</div>', unsafe_allow_html=True)
+    a, b = st.columns(2)
+    with a:
+        topk = tables["targeting"]
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=topk["top_percent"], y=topk["capture_rate"], name="포착률", marker_color=COLORS["orange"], text=topk["capture_rate"].map(lambda x: f"{x:.1%}")))
+        fig.add_trace(go.Scatter(x=topk["top_percent"], y=topk["lift"], name="Lift", yaxis="y2", mode="lines+markers", line={"color": COLORS["navy"], "width": 3}))
+        fig.update_layout(title="OOF Top-K 포착률과 Lift", xaxis_title="위험 점수 상위 비율(%)", yaxis={"title": "포착률", "tickformat": ".0%"}, yaxis2={"title": "Lift", "overlaying": "y", "side": "right"}, legend_orientation="h")
+        st.plotly_chart(plot_style(fig), width="stretch")
+    with b:
+        deciles = tables["deciles"]
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=deciles["risk_decile"], y=deciles["actual_churn_rate"], name="관측 이탈률", marker_color=COLORS["navy"]))
+        fig.add_trace(go.Scatter(x=deciles["risk_decile"], y=deciles["mean_predicted_probability"], name="평균 예측 확률", mode="lines+markers", line={"color": COLORS["orange"], "width": 3}))
+        fig.update_layout(title="OOF Risk Decile 진단", xaxis_title="위험 Decile (10=최고)", yaxis_tickformat=".0%", legend_orientation="h")
+        st.plotly_chart(plot_style(fig), width="stretch")
+
+    scenarios_display = tables["scenarios"][["scenario_label", "threshold", "oof_target_rate", "oof_recall", "oof_precision", "oof_f1", "oof_fn", "oof_fp"]].copy()
+    scenarios_display.columns = ["시나리오", "Threshold", "대상 비율", "Recall", "Precision", "F1", "FN", "FP"]
+    st.dataframe(scenarios_display.style.format({"Threshold": "{:.2f}", "대상 비율": "{:.1%}", "Recall": "{:.1%}", "Precision": "{:.1%}", "F1": "{:.1%}"}), hide_index=True, width="stretch")
+    st.markdown('<div class="info-card"><b>사용자가 결정할 질문</b><br>이탈 고객 한 명을 놓치는 비용(FN)은 불필요한 접촉 한 건(FP)보다 얼마나 큰가? 그리고 한 회차에 실제로 검토할 수 있는 고객은 몇 명인가?</div>', unsafe_allow_html=True)
+    boundary_note()
+
+
+def risk_level(probability: float, scenarios: pd.DataFrame) -> tuple[str, str]:
+    low = float(scenarios["threshold"].min())
+    high = float(scenarios["threshold"].max())
+    if probability >= high:
+        return "높은 우선순위", "risk-high"
+    if probability >= low:
+        return "검토 후보", "risk-mid"
+    return "낮은 우선순위", "risk-low"
+
+
+def input_context(record: dict, train: pd.DataFrame) -> list[str]:
+    contexts = []
+    if str(record["subscription_type"]) == "Free":
+        contexts.append("Free 구독 유형")
+    if str(record["customer_service_inquiries"]) == "High":
+        contexts.append("높은 고객 문의 수준")
+    if float(record["weekly_hours"]) < float(train["weekly_hours"].median()):
+        contexts.append("중앙값보다 낮은 주간 청취시간")
+    if float(record["song_skip_rate"]) > float(train["song_skip_rate"].median()):
+        contexts.append("중앙값보다 높은 스킵률")
+    if int(record["num_subscription_pauses"]) >= int(train["num_subscription_pauses"].quantile(.75)):
+        contexts.append("상위 구간의 구독 일시정지 횟수")
+    return contexts or ["선택한 핵심 행동 변수에서 뚜렷한 진단 플래그 없음"]
+
+
+def strategy_review_panel(record: dict, probability: float, tables: dict, scenario: pd.Series) -> None:
+    strategy = recommend_retention_strategy(
+        record,
+        probability,
+        tables["strategy_thresholds"],
+        low_risk_threshold=float(tables["scenarios"]["threshold"].min()),
+        high_risk_threshold=float(tables["scenarios"]["threshold"].max()),
+    )
+    st.markdown('<div class="section-label">유지 전략 검토</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="note-card"><b>설계 원칙</b><br>접촉 비용·고객 가치·방어 성공률은 마케팅 담당자가 입력하는 가정값이며, 화면은 계산 프레임만 제공합니다. '
-        '기대 포착치는 모델 확률 합산 기반 근사입니다(제공 test에는 정답 라벨 없음).</div>',
+        '<div class="strategy-strip">'
+        f'<div class="strategy-cell"><span>운영 단계</span><b>{html.escape(str(strategy["campaign_tier"]))}</b></div>'
+        f'<div class="strategy-cell"><span>고객 세그먼트</span><b>{html.escape(str(strategy["strategy_segment"]))}</b></div>'
+        f'<div class="strategy-cell"><span>행동 가능 신호</span><b>{int(strategy["risk_signal_count"])}개</b></div>'
+        f'<div class="strategy-cell"><span>검토 상태</span><b>담당자 승인 필요</b></div>'
+        '</div>',
         unsafe_allow_html=True,
     )
+    primary, alternative = st.columns(2)
+    with primary:
+        st.markdown(
+            '<div class="action-card"><div class="action-rank">1순위 행동 후보</div>'
+            f'<div class="action-title">{html.escape(str(strategy["primary_action"]))}</div>'
+            f'<div class="action-row"><b>왜</b> · {html.escape(str(strategy["action_rationale"]))}</div>'
+            f'<div class="action-row"><b>언제</b> · {html.escape(str(strategy["action_timing"]))}</div>'
+            f'<div class="action-row"><b>KPI</b> · {html.escape(str(strategy["validation_kpi"]))}</div></div>',
+            unsafe_allow_html=True,
+        )
+    with alternative:
+        st.markdown(
+            '<div class="action-card alt"><div class="action-rank" style="color:#315d78">대안 행동 후보</div>'
+            f'<div class="action-title">{html.escape(str(strategy["alternative_action"]))}</div>'
+            f'<div class="action-row"><b>관찰 신호</b> · {html.escape(str(strategy["observed_signals"]))}</div>'
+            '<div class="action-row"><b>직접 행동 신호에서 제외</b> · 나이·지역·고객 ID'
+            '<br><span class="small">나이·지역은 예측 모델의 위험 점수를 통해 캠페인 단계에 간접 영향을 줄 수 있습니다.</span></div>'
+            f'<div class="action-row"><b>근거 수준</b> · {html.escape(str(strategy["evidence_level"]))}</div></div>',
+            unsafe_allow_html=True,
+        )
 
-    base = predictions.merge(test[["customer_id", "subscription_type"]], on="customer_id", how="inner")
-    base = base.rename(columns={"churn_probability": "prob", "subscription_type": "plan"})[["customer_id", "prob", "plan"]]
-    plan_list = base.groupby("plan")["prob"].mean().sort_values(ascending=False).index.tolist()
+    decision_options = [
+        str(strategy["primary_action"]),
+        str(strategy["alternative_action"]),
+        "담당자 직접 검토",
+        "이번 회차 보류",
+    ]
+    decision = st.radio(
+        "담당자 결정",
+        decision_options,
+        horizontal=True,
+        key=f"action_decision_{int(record['customer_id'])}",
+        help="선택은 이 화면과 다운로드 기록에만 반영되며 외부 CRM 조치를 실행하지 않습니다.",
+    )
+    note = st.text_input(
+        "검토 메모(선택)",
+        placeholder="예: 최근 문의 해결 여부를 먼저 확인",
+        key=f"action_note_{int(record['customer_id'])}",
+    )
+    review_record = pd.DataFrame([{
+        "customer_id": int(record["customer_id"]),
+        "churn_probability": probability,
+        "operating_scenario": str(scenario["scenario_label"]),
+        "campaign_tier": strategy["campaign_tier"],
+        "strategy_segment": strategy["strategy_segment"],
+        "observed_signals": strategy["observed_signals"],
+        "suggested_action": strategy["primary_action"],
+        "alternative_action": strategy["alternative_action"],
+        "selected_action": decision,
+        "validation_kpi": strategy["validation_kpi"],
+        "review_note": note,
+        "evidence_level": strategy["evidence_level"],
+        "external_action_executed": False,
+    }])
+    st.download_button(
+        "담당자 검토 기록 CSV 다운로드",
+        review_record.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"customer_{int(record['customer_id'])}_retention_review.csv",
+        mime="text/csv",
+    )
+    st.caption("행동 후보는 EDA 연관성과 투명한 규칙에서 생성됩니다. 선택해도 CRM 발송·할인·고객 접촉은 실행되지 않습니다.")
 
-    ss = st.session_state
-    ss.setdefault("sim_driver", "budget")
-    ss.setdefault("sim_budget", 5_000_000)
-    ss.setdefault("sim_count", 1666)
-    ss.setdefault("sim_pct", 16.7)
 
-    def _set_driver(name: str):
-        st.session_state["sim_driver"] = name
+CAMPAIGN_ALLOCATION_MODES = {
+    "action_portfolio": "행동 경로별 파일럿 포트폴리오 (권장)",
+    "risk_priority": "위험 점수 순",
+    "economic_reference": "가정 매출효과-비용 순 (참고)",
+}
 
-    st.markdown('<div class="section-label">캠페인 규모</div>', unsafe_allow_html=True)
-    st.markdown('<div class="small-caption">셋 중 아무 값이나 수정하면 나머지 둘이 자동 환산됩니다.</div>', unsafe_allow_html=True)
-    scale_box = st.container()
 
-    def render_scale_inputs():
-        with scale_box:
-            a, b, c = st.columns(3)
-            a.number_input("캠페인 예산 (원)", min_value=0, step=500_000, key="sim_budget", on_change=_set_driver, args=("budget",))
-            b.number_input("연락 인원 (명)", min_value=0, step=50, key="sim_count", on_change=_set_driver, args=("count",))
-            c.number_input("상위 위험군 (%)", min_value=0.0, max_value=100.0, step=1.0, key="sim_pct", on_change=_set_driver, args=("pct",))
+def _campaign_net_curve(
+    frame: pd.DataFrame,
+    success_rate: float,
+    fixed_cost: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a down-sampled cumulative net-value curve for a campaign pool."""
 
-    col_sr, col_sort = st.columns([1.4, 1])
-    with col_sr:
-        success_rate = st.slider("방어 성공률 (%)", 5, 50, 20, 5) / 100.0
+    if frame.empty:
+        return np.array([], dtype=float), np.array([], dtype=float)
 
-    kpi_box = st.container()
+    ordered = frame.copy()
+    if fixed_cost is not None:
+        ordered["cost"] = fixed_cost
+    cumulative_benefit = (
+        ordered["probability"] * float(success_rate) * ordered["customer_value"]
+    ).cumsum().to_numpy()
+    cumulative_net = (
+        cumulative_benefit - ordered["cost"].cumsum().to_numpy()
+    ) / 1_000_000
+    x = np.arange(1, len(ordered) + 1) / len(ordered) * 100
+    step = max(1, len(ordered) // 350)
+    indexes = np.unique(
+        np.concatenate([np.arange(0, len(ordered), step), [len(ordered) - 1]])
+    )
+    return x[indexes], cumulative_net[indexes]
 
-    st.markdown('<div class="section-label">요금제별 설정</div>', unsafe_allow_html=True)
-    st.markdown('<div class="small-caption">\'포함\'을 끄면 해당 요금제는 산식(배정·퍼널·곡선)에서 제외됩니다. 기본값 동일 = 전역 가정과 같은 동작.</div>', unsafe_allow_html=True)
-    counts = base.groupby("plan")["prob"].agg(["size", "mean"])
-    cfg = st.data_editor(
-        pd.DataFrame(
-            {
-                "요금제": plan_list,
-                "보유 고객": [int(counts.loc[p, "size"]) for p in plan_list],
-                "평균 위험도": [f"{counts.loc[p, 'mean']:.1%}" for p in plan_list],
-                "포함": True,
-                "접촉 비용(원)": 3000,
-                "고객 가치(원/년)": 120000,
-            }
-        ),
+
+def _prepare_campaign_plan(
+    strategy_queue: pd.DataFrame,
+    customer_plans: pd.DataFrame,
+    economics: pd.DataFrame,
+    threshold: float,
+    min_signal_count: int,
+    success_rate: float,
+    allocation_mode: str,
+) -> pd.DataFrame:
+    """Build an ordered, review-only campaign pool for the planning tab."""
+
+    if allocation_mode not in CAMPAIGN_ALLOCATION_MODES:
+        raise ValueError(f"지원하지 않는 배분 기준입니다: {allocation_mode}")
+    base = strategy_queue.merge(
+        customer_plans[["customer_id", "subscription_type"]],
+        on="customer_id",
+        how="inner",
+        validate="one_to_one",
+    ).rename(columns={"churn_probability": "probability", "subscription_type": "plan"})
+    work = base.loc[
+        base["probability"].ge(float(threshold))
+        & base["risk_signal_count"].ge(int(min_signal_count))
+    ].merge(economics, on="plan", how="inner", validate="many_to_one")
+    work["expected_revenue_effect"] = work["probability"] * float(success_rate) * work["customer_value"]
+    work["assumed_net_value"] = work["expected_revenue_effect"] - work["cost"]
+
+    if allocation_mode == "action_portfolio":
+        tier_rank = {"집중 관리": 0, "자동화 검토": 1, "관찰 유지": 2}
+        work["_tier_rank"] = work["campaign_tier"].map(tier_rank).fillna(3)
+        work = work.sort_values(
+            ["probability", "risk_signal_count"], ascending=[False, False]
+        )
+        work["_allocation_round"] = work.groupby(
+            ["campaign_tier", "primary_action"], sort=False
+        ).cumcount()
+        work = work.sort_values(
+            ["_allocation_round", "_tier_rank", "risk_signal_count", "probability"],
+            ascending=[True, True, False, False],
+        )
+    elif allocation_mode == "risk_priority":
+        work = work.sort_values(
+            ["probability", "risk_signal_count"], ascending=[False, False]
+        )
+    else:
+        work = work.sort_values(
+            ["assumed_net_value", "probability"], ascending=[False, False]
+        )
+    return work.reset_index(drop=True)
+
+
+def campaign_planning_panel(
+    test: pd.DataFrame,
+    strategy_queue: pd.DataFrame,
+    scenario: pd.Series,
+) -> None:
+    st.markdown(
+        '<div class="info-card"><b>가정 기반 캠페인 계획</b><br>'
+        f'현재 <b>{html.escape(str(scenario["scenario_label"]))}</b>의 Threshold <b>{float(scenario["threshold"]):.2f}</b> 이상에서 '
+        '행동 가능 신호를 가진 고객만 계획합니다. 기본 배분은 아직 효과가 검증되지 않은 행동들을 비교할 수 있도록 행동 경로별 파일럿 포트폴리오를 구성하며, '
+        '금액은 의사결정 민감도 참고값이지 실제 Uplift·ROI가 아닙니다.</div>',
+        unsafe_allow_html=True,
+    )
+    planning_source = strategy_queue.merge(
+        test[["customer_id", "subscription_type"]], on="customer_id", how="inner", validate="one_to_one"
+    ).rename(columns={"churn_probability": "probability", "subscription_type": "plan"})
+    plan_order = planning_source.groupby("plan")["probability"].mean().sort_values(ascending=False).index.tolist()
+
+    state = st.session_state
+    state.setdefault("campaign_driver", "budget")
+    state.setdefault("campaign_budget", 5_000_000)
+    state.setdefault("campaign_count", 1666)
+    state.setdefault("campaign_percent", 2.2)
+
+    def set_campaign_driver(name: str) -> None:
+        st.session_state["campaign_driver"] = name
+
+    st.markdown('<div class="section-label">계획 가정과 대상 범위</div>', unsafe_allow_html=True)
+    input_box = st.container()
+    assumption_left, assumption_middle, assumption_right = st.columns([1, 1, 1.15])
+    with assumption_left:
+        min_signal_count = st.slider(
+            "최소 행동 가능 신호 수", 1, 5, 2, 1, key="campaign_min_signal_count",
+            help="프로젝트의 집중 검토 기준인 행동 가능 신호 2개 이상을 기본값으로 사용합니다.",
+        )
+    with assumption_middle:
+        success_rate = st.slider("접촉 고객의 추가 유지 성공률 가정", 0.0, 0.5, 0.10, 0.01, key="campaign_success_rate")
+    with assumption_right:
+        st.markdown(
+            '<div class="note-card"><b>대상 기준</b><br>선택한 Threshold와 최소 신호 수를 모두 충족해야 계획 후보가 됩니다. 예산·인원·비율은 서로 연동됩니다.</div>',
+            unsafe_allow_html=True,
+        )
+
+    threshold = float(scenario["threshold"])
+    eligible = planning_source.loc[
+        planning_source["probability"].ge(threshold)
+        & planning_source["risk_signal_count"].ge(min_signal_count)
+    ]
+    counts = eligible.groupby("plan")["probability"].agg(["size", "mean"]).reindex(plan_order)
+    economic_defaults = plan_economic_assumptions(plan_order).set_index("plan")
+    config = st.data_editor(
+        pd.DataFrame({
+            "구독 유형": plan_order,
+            "조건 충족 고객": [int(counts.loc[plan, "size"]) if pd.notna(counts.loc[plan, "size"]) else 0 for plan in plan_order],
+            "평균 위험 점수": [float(counts.loc[plan, "mean"]) if pd.notna(counts.loc[plan, "mean"]) else 0.0 for plan in plan_order],
+            "기본 접촉 채널": [str(economic_defaults.loc[plan, "default_channel"]) for plan in plan_order],
+            "포함": True,
+            "1인 캠페인 변동비(원)": [int(economic_defaults.loc[plan, "contact_cost"]) for plan in plan_order],
+            "연간 매출 대용치(원)": [int(economic_defaults.loc[plan, "customer_value"]) for plan in plan_order],
+        }),
         hide_index=True,
-        disabled=["요금제", "보유 고객", "평균 위험도"],
+        disabled=["구독 유형", "조건 충족 고객", "평균 위험 점수", "기본 접촉 채널"],
         column_config={
+            "평균 위험 점수": st.column_config.NumberColumn("평균 위험 점수", format="percent"),
             "포함": st.column_config.CheckboxColumn("포함"),
-            "접촉 비용(원)": st.column_config.NumberColumn("접촉 비용(원)", min_value=0, step=500),
-            "고객 가치(원/년)": st.column_config.NumberColumn("고객 가치(원/년)", min_value=0, step=10000),
+            "1인 캠페인 변동비(원)": st.column_config.NumberColumn("1인 캠페인 변동비(원)", help="발송료뿐 아니라 해당 채널의 자동화·상담 운영비를 포함한 가정입니다.", min_value=0, step=100),
+            "연간 매출 대용치(원)": st.column_config.NumberColumn("연간 매출 대용치(원)", help="LTV나 기여이익이 아닌 외부 공개 요금 기반 참고값입니다.", min_value=0, step=1000),
         },
         width="stretch",
-    ).set_index("요금제")
+        key="campaign_plan_config_v2",
+    ).set_index("구독 유형")
+    with st.expander("구독 유형별 기본 가정의 추론 근거"):
+        assumption_view = economic_defaults.reset_index().rename(columns={
+            "plan": "구독 유형", "contact_cost": "1인 캠페인 변동비", "customer_value": "연간 매출 대용치",
+            "default_channel": "기본 접촉 채널", "basis": "추론 근거",
+        })
+        st.dataframe(assumption_view, hide_index=True, width="stretch")
+        st.caption("PlaylistPro의 가격·마진·채널 원가가 없어 [외부 공개 음악 구독 요금](https://www.spotify.com/kr-ko/premium/)을 부가세 제외 연간 매출로 환산했습니다(2026-07-22 기준). Free는 근거가 없어 0원이며, 모든 값은 편집 가능한 계획 가정입니다. LTV·기여이익이 아닙니다.")
 
-    included = [p for p in plan_list if bool(cfg.loc[p, "포함"])]
+    allocation_mode = st.radio(
+        "대상 배분 기준",
+        list(CAMPAIGN_ALLOCATION_MODES),
+        format_func=CAMPAIGN_ALLOCATION_MODES.get,
+        horizontal=True,
+        key="campaign_allocation_mode",
+        help="권장안은 행동별 효과를 아직 모르는 파일럿 단계에서 특정 요금제나 행동 하나에 전체 예산이 몰리지 않도록 합니다.",
+    )
+
+    included = [plan for plan in plan_order if bool(config.loc[plan, "포함"])]
     if not included:
-        render_scale_inputs()
-        st.warning("산식에 포함된 요금제가 없습니다. 하나 이상 선택해주세요.")
+        st.warning("계획에 포함할 구독 유형을 하나 이상 선택해 주세요.")
         return
-
-    work = base[base["plan"].isin(included)].copy()
-    work["cost"] = work["plan"].map(cfg["접촉 비용(원)"].astype(float))
-    work["ltv"] = work["plan"].map(cfg["고객 가치(원/년)"].astype(float))
-    work["ev"] = work["prob"] * success_rate * work["ltv"] - work["cost"]
-    work = work.sort_values(["ev", "prob"], ascending=False).reset_index(drop=True)
+    economics = config.loc[included].reset_index()[
+        ["구독 유형", "1인 캠페인 변동비(원)", "연간 매출 대용치(원)"]
+    ].rename(columns={
+        "구독 유형": "plan",
+        "1인 캠페인 변동비(원)": "cost",
+        "연간 매출 대용치(원)": "customer_value",
+    })
+    work = _prepare_campaign_plan(
+        strategy_queue,
+        test,
+        economics,
+        threshold,
+        min_signal_count,
+        success_rate,
+        allocation_mode,
+    )
     pool = len(work)
-    cum_spend = work["cost"].cumsum().values
+    if not pool:
+        st.warning("현재 Threshold·행동 신호·구독 유형 조건을 모두 충족하는 고객이 없습니다.")
+        return
+    cumulative_spend = work["cost"].cumsum().to_numpy()
 
-    driver = ss["sim_driver"]
+    driver = state["campaign_driver"]
     if driver == "budget":
-        n_sel = int((cum_spend <= float(ss["sim_budget"])).sum())
+        selected_count = int((cumulative_spend <= float(state["campaign_budget"])).sum())
     elif driver == "count":
-        n_sel = int(min(int(ss["sim_count"]), pool))
+        selected_count = min(int(state["campaign_count"]), pool)
     else:
-        n_sel = int(round(float(ss["sim_pct"]) / 100.0 * pool))
-    n_sel = max(0, min(n_sel, pool))
-
-    sel = work.iloc[:n_sel]
-    spend = float(sel["cost"].sum())
-    caught = float(sel["prob"].sum())
-    saved = caught * success_rate
-    revenue = float((sel["prob"] * success_rate * sel["ltv"]).sum())
-    net = revenue - spend
+        selected_count = int(round(float(state["campaign_percent"]) / 100 * pool))
+    selected_count = max(0, min(selected_count, pool))
+    selected = work.iloc[:selected_count]
+    spend = float(selected["cost"].sum())
+    risk_score_sum = float(selected["probability"].sum())
+    assumed_retained = risk_score_sum * success_rate
+    assumed_benefit = float((selected["probability"] * success_rate * selected["customer_value"]).sum())
+    assumed_net = assumed_benefit - spend
 
     if driver != "budget":
-        ss["sim_budget"] = int(spend)
+        state["campaign_budget"] = int(spend)
     if driver != "count":
-        ss["sim_count"] = int(n_sel)
-    if driver != "pct":
-        ss["sim_pct"] = round(n_sel / pool * 100, 1) if pool else 0.0
-    render_scale_inputs()
+        state["campaign_count"] = int(selected_count)
+    if driver != "percent":
+        state["campaign_percent"] = round(selected_count / pool * 100, 1) if pool else 0.0
+    with input_box:
+        a, b, c = st.columns(3)
+        a.number_input("캠페인 예산(원)", min_value=0, step=500_000, key="campaign_budget", on_change=set_campaign_driver, args=("budget",))
+        b.number_input("연락 인원(명)", min_value=0, max_value=pool, step=50, key="campaign_count", on_change=set_campaign_driver, args=("count",))
+        c.number_input("상위 위험군(%)", min_value=0.0, max_value=100.0, step=0.5, key="campaign_percent", on_change=set_campaign_driver, args=("percent",))
 
-    counts_all = base.groupby("plan")["prob"].mean()
-    plan_result = []
-    for p in plan_list:
-        if p in included:
-            row_ev = float(counts_all.loc[p]) * success_rate * float(cfg.loc[p, "고객 가치(원/년)"]) - float(cfg.loc[p, "접촉 비용(원)"])
-            plan_result.append([p, f"{row_ev:,.0f}원", f"{int((sel['plan'] == p).sum()):,}명"])
-        else:
-            plan_result.append([p, "제외", "-"])
-    st.dataframe(pd.DataFrame(plan_result, columns=["요금제", "기대이익/인(평균 위험도 기준)", "연락 배정"]), hide_index=True, width="stretch")
+    sort_label = CAMPAIGN_ALLOCATION_MODES[allocation_mode]
+    st.caption(
+        f"조건 충족 풀 {pool:,}명 · Threshold ≥ {threshold:.2f} · 행동 신호 ≥ {min_signal_count}개 · "
+        f"현재 배분: {sort_label} · test.csv에는 정답 라벨이 없습니다."
+    )
+    selected_action_count = int(selected["primary_action"].nunique()) if selected_count else 0
+    mean_signals = float(selected["risk_signal_count"].mean()) if selected_count else 0.0
+    for column, item in zip(st.columns(4), [
+        ("계획 연락", f"{selected_count:,}명", f"조건 충족 풀의 {selected_count / pool:.1%}"),
+        ("가정 집행액", f"{spend:,.0f}원", f"1인 평균 {spend / selected_count:,.0f}원" if selected_count else "-"),
+        ("위험·행동 신호", f"{risk_score_sum / selected_count:.1%}" if selected_count else "-", f"평균 신호 {mean_signals:.1f}개" if selected_count else "-"),
+        ("행동 경로", f"{selected_action_count}개", f"가정 추가 유지 {assumed_retained:,.1f}명"),
+    ]):
+        with column:
+            metric_card(*item)
+    economics_note = (
+        f'가정 매출효과 <b>{assumed_benefit:,.0f}원</b> · '
+        f'변동비 차감값 <b>{assumed_net:,.0f}원</b> · '
+        f'매출효과/비용 <b>{assumed_benefit / spend:.1f}배</b>'
+        if spend else "현재 계획 집행액이 0원입니다."
+    )
+    st.markdown(f'<div class="note-card"><b>경제성 참고</b><br>{economics_note}</div>', unsafe_allow_html=True)
+    if selected_count:
+        plan_share = selected["plan"].value_counts(normalize=True)
+        action_share = selected["primary_action"].value_counts(normalize=True)
+        dominant_label, dominant_share = (
+            (f"구독 유형 '{plan_share.index[0]}'", float(plan_share.iloc[0]))
+            if float(plan_share.iloc[0]) >= float(action_share.iloc[0])
+            else (f"행동 '{action_share.index[0]}'", float(action_share.iloc[0]))
+        )
+        if dominant_share >= 0.8:
+            st.warning(f"현재 계획의 {dominant_share:.1%}가 {dominant_label}에 집중됩니다. 배분 기준이나 포함 구독 유형을 확인해 주세요.")
 
-    uniform = cfg["접촉 비용(원)"].nunique() == 1 and cfg["고객 가치(원/년)"].nunique() == 1
-    sort_label = "이탈 확률 순 (요금제별 값 동일 → 기대이익 순과 일치)" if uniform else "기대이익 순 (요금제별 값 차등 반영)"
-    with col_sort:
-        st.markdown(f'<div class="note-card" style="margin-top:28px"><b>정렬 기준</b><br>{sort_label}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">캠페인 퍼널과 유지 행동별 배정</div>', unsafe_allow_html=True)
+    funnel_col, allocation_col = st.columns([1.2, 1])
+    with funnel_col:
+        funnel = go.Figure(go.Funnel(
+            y=["Threshold·신호 조건 충족", "계획 연락", "모델 위험도 합계", "가정 추가 유지"],
+            x=[pool, selected_count, risk_score_sum, assumed_retained],
+            textinfo="value+percent initial",
+            marker={"color": ["#315d78", "#e4573d", "#e8a23a", "#2f7d62"]},
+            connector={"line": {"color": "#dbe5ef"}},
+        ))
+        funnel.update_layout(title="가정 기반 캠페인 퍼널")
+        st.plotly_chart(plot_style(funnel, 360), width="stretch")
+    with allocation_col:
+        allocation = selected.groupby(["primary_action", "plan"], observed=True).size().reset_index(name="연락 배정")
+        allocation = allocation.rename(columns={"primary_action": "유지 행동", "plan": "구독 유형"})
+        fig = px.bar(allocation, x="연락 배정", y="유지 행동", color="구독 유형", orientation="h", text="연락 배정")
+        fig.update_layout(title="유지 행동별 연락 배정", xaxis_title="연락 인원", yaxis_title=None, legend_title="구독 유형", barmode="stack")
+        st.plotly_chart(plot_style(fig, 360), width="stretch")
 
-    with kpi_box:
-        st.markdown(f'<div class="small-caption">대상 풀 {pool:,}명 · 기대 이탈자 {work["prob"].sum():,.0f}명</div>', unsafe_allow_html=True)
-        k1, k2, k3, k4 = st.columns(4)
-        with k1: metric_card("집행액", f"{spend:,.0f}원", f"{n_sel:,}명 연락")
-        with k2: metric_card("기대 포착 이탈자", f"{caught:,.0f}명", f"방어 {saved:,.0f}명 (성공률 {success_rate:.0%})")
-        with k3: metric_card("연간 절감 기대액", f"{revenue:,.0f}원", "가치 가정 반영")
-        with k4: metric_card("순이익 · ROI", f"{net:,.0f}원", f"ROI {net / spend:.0%}" if spend > 0 else "-")
-
-    st.markdown('<div class="section-label">캠페인 퍼널</div>', unsafe_allow_html=True)
-    miss = max(n_sel - caught, 0.0)
-    stages = ["방어 성공", "기대 포착 이탈자", "연락 대상", "대상 고객(선택 요금제)"]
-    fig = go.Figure()
-    fig.add_trace(go.Bar(y=stages, x=[0, 0, 0, pool], orientation="h", name="대상 고객", marker_color="#b4b2a9", showlegend=False))
-    fig.add_trace(go.Bar(y=stages, x=[0, caught, caught, 0], orientation="h", name="적중(진짜 이탈 예정)", marker_color="#d03b3b"))
-    fig.add_trace(go.Bar(y=stages, x=[0, 0, miss, 0], orientation="h", name="오경보", marker_color="#eda100"))
-    fig.add_trace(go.Bar(y=stages, x=[saved, 0, 0, 0], orientation="h", name="방어 성공", marker_color="#008300", showlegend=False))
-    fig.update_layout(barmode="stack", height=280, xaxis_range=[0, pool * 1.05], xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(plotly_theme(fig), width="stretch")
-    if n_sel:
-        st.markdown(f'<div class="small-caption">연락 대상 {n_sel:,}명 중 기대 적중 {caught:,.0f}명 · 오경보 {n_sel - caught:,.0f}명 (정밀도 {caught / n_sel:.1%})</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-label">연락 범위별 순이익 곡선</div>', unsafe_allow_html=True)
-    curve_mode = st.radio("곡선 모드", ["현재 설정 기준", "단가 시나리오 비교"], horizontal=True)
-    scen_costs = []
-    if curve_mode == "단가 시나리오 비교":
-        s1, s2, s3 = st.columns(3)
-        scen_costs = [
-            s1.number_input("시나리오 단가 1 (원)", min_value=0, value=3000, step=500),
-            s2.number_input("시나리오 단가 2 (원)", min_value=0, value=6000, step=500),
-            s3.number_input("시나리오 단가 3 (원)", min_value=0, value=9000, step=500),
+    st.markdown('<div class="section-label">연락 범위별 가정 매출효과-비용 곡선</div>', unsafe_allow_html=True)
+    curve_mode = st.radio("곡선 비교 방식", ["현재 요금제별 설정", "접촉 단가 시나리오 비교"], horizontal=True, key="campaign_curve_mode")
+    scenario_costs: list[float] = []
+    if curve_mode == "접촉 단가 시나리오 비교":
+        c1, c2, c3 = st.columns(3)
+        scenario_costs = [
+            float(c1.number_input("낮은 단가(원)", min_value=0, value=100, step=100)),
+            float(c2.number_input("중간 단가(원)", min_value=0, value=1000, step=100)),
+            float(c3.number_input("높은 단가(원)", min_value=0, value=5000, step=100)),
         ]
-    scen_style = [("#2a78d6", None), ("#1baf7a", "dash"), ("#eb6834", "dot")]
 
-    def curve_arrays(sorted_df):
-        rev_c = (sorted_df["prob"].values * success_rate * sorted_df["ltv"].values).cumsum()
-        net_c = (rev_c - sorted_df["cost"].values.cumsum()) / 1e6
-        x = np.arange(1, len(sorted_df) + 1) / len(sorted_df) * 100
-        step = max(1, len(sorted_df) // 300)
-        idx = np.unique(np.concatenate([np.arange(0, len(sorted_df), step), [len(sorted_df) - 1]]))
-        return x[idx], net_c[idx], net_c
+    active_plan_order = [plan for plan in plan_order if plan in included]
+    curve_tabs = st.tabs(["전체"] + active_plan_order)
+    frames = [("전체", work)] + [
+        (plan, work.loc[work["plan"].eq(plan)].reset_index(drop=True))
+        for plan in active_plan_order
+    ]
+    for tab, (name, frame) in zip(curve_tabs, frames):
+        with tab:
+            fig = go.Figure()
+            if scenario_costs:
+                for cost, color, dash in zip(scenario_costs, [COLORS["green"], COLORS["blue"], COLORS["orange"]], ["solid", "dash", "dot"]):
+                    x, y = _campaign_net_curve(frame, success_rate, cost)
+                    fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"접촉 단가 {cost:,.0f}원", line={"color": color, "dash": dash, "width": 3}))
+            else:
+                x, y = _campaign_net_curve(frame, success_rate)
+                fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="가정 매출효과-비용", fill="tozeroy", line={"color": COLORS["orange"], "width": 3}))
+                if name == "전체" and selected_count and x.size:
+                    marker_index = int(np.argmin(np.abs(x - selected_count / pool * 100)))
+                    fig.add_trace(go.Scatter(x=[x[marker_index]], y=[y[marker_index]], mode="markers", name="현재 계획", marker={"size": 12, "color": COLORS["navy"]}))
+            if frame.empty:
+                fig.add_annotation(
+                    text="이 요금제에는 현재 조건을 충족하는 고객이 없습니다.",
+                    x=.5,
+                    y=.5,
+                    xref="paper",
+                    yref="paper",
+                    showarrow=False,
+                )
+            fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
+            fig.update_layout(title=f"{name} · 연락 범위별 가정 매출효과-비용", xaxis_title="현재 배분 순서 기준 연락 범위", xaxis_ticksuffix="%", yaxis_title="가정 매출효과-비용(백만원)", legend_orientation="h")
+            st.plotly_chart(plot_style(fig, 390), width="stretch")
+    st.caption("추가 유지·매출효과·비용 차감값은 사용자 입력 가정에 따른 민감도 분석입니다. 실제 효과는 행동 경로별 대조군을 둔 캠페인 실험과 미래 라벨로 검증해야 합니다.")
 
-    def group_figure(sub_df, group_pool, marker_n):
-        fig = go.Figure()
-        if scen_costs:
-            for c, (color, dash) in zip(scen_costs, scen_style):
-                tmp = sub_df.copy()
-                tmp["cost"] = float(c)
-                tmp["ev"] = tmp["prob"] * success_rate * tmp["ltv"] - tmp["cost"]
-                tmp = tmp.sort_values(["ev", "prob"], ascending=False)
-                x, y, _ = curve_arrays(tmp)
-                fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"단가 {c:,.0f}원", line=dict(color=color, dash=dash, width=3)))
+
+def prioritization_page(tables: dict, model, scenario: pd.Series) -> None:
+    section_header("CUSTOMER PRIORITY", "고객 위험을 확인하고 유지 활동을 선택하세요", "저장된 CatBoost가 위험 점수를 재계산하고, 별도의 투명한 전략 규칙이 담당자 검토용 행동 후보와 KPI를 제시합니다.")
+    train, test, predictions = tables["train"], tables["test"], tables["predictions"]
+    single_tab, batch_tab, planning_tab = st.tabs(["단건 시뮬레이션", "배치 우선순위", "가정 기반 계획"])
+    with single_tab:
+        base_id = st.selectbox("기준 고객 ID", test["customer_id"].head(3000).tolist(), help="test.csv의 기존 고객을 불러온 뒤 입력값을 수정할 수 있습니다.")
+        base = test.loc[test["customer_id"].eq(base_id)].iloc[0]
+        categorical = ["location", "subscription_type", "payment_plan", "payment_method", "customer_service_inquiries"]
+        options = {column: sorted(pd.concat([train[column], test[column]]).dropna().astype(str).unique().tolist()) for column in categorical}
+        key_prefix = f"score_{int(base_id)}"
+        with st.form("customer_score_form"):
+            st.markdown('<div class="section-label">구독·고객 맥락</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            record = {"customer_id": int(base["customer_id"])}
+            with c1:
+                record["age"] = st.number_input("나이", int(train.age.min()), int(train.age.max()), int(base.age), key=f"{key_prefix}_age")
+                record["location"] = st.selectbox("지역", options["location"], index=options["location"].index(str(base.location)), key=f"{key_prefix}_location")
+                record["subscription_type"] = st.selectbox("구독 유형", options["subscription_type"], index=options["subscription_type"].index(str(base.subscription_type)), key=f"{key_prefix}_subscription")
+            with c2:
+                record["payment_plan"] = st.selectbox("결제 주기", options["payment_plan"], index=options["payment_plan"].index(str(base.payment_plan)), key=f"{key_prefix}_plan")
+                record["payment_method"] = st.selectbox("결제 수단", options["payment_method"], index=options["payment_method"].index(str(base.payment_method)), key=f"{key_prefix}_method")
+                record["customer_service_inquiries"] = st.selectbox("고객 문의 수준", options["customer_service_inquiries"], index=options["customer_service_inquiries"].index(str(base.customer_service_inquiries)), key=f"{key_prefix}_inquiry")
+            with c3:
+                record["num_subscription_pauses"] = st.number_input("구독 일시정지 횟수", 0, int(train.num_subscription_pauses.max()), int(base.num_subscription_pauses), key=f"{key_prefix}_pause")
+                record["signup_date"] = st.number_input("가입일 상대값", int(train.signup_date.min()), int(train.signup_date.max()), int(base.signup_date), key=f"{key_prefix}_signup")
+                record["notifications_clicked"] = st.number_input("알림 클릭 수", 0, int(train.notifications_clicked.max()), int(base.notifications_clicked), key=f"{key_prefix}_notification")
+
+            st.markdown('<div class="section-label">이용 행동</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                record["weekly_hours"] = st.number_input("주간 청취시간", 0.0, float(train.weekly_hours.max()), float(base.weekly_hours), .5, key=f"{key_prefix}_hours")
+                record["average_session_length"] = st.number_input("평균 세션 길이", 0.0, float(train.average_session_length.max()), float(base.average_session_length), 1.0, key=f"{key_prefix}_session")
+                record["song_skip_rate"] = st.slider("스킵률", 0.0, 1.0, float(base.song_skip_rate), .01, key=f"{key_prefix}_skip")
+            with c2:
+                record["weekly_songs_played"] = st.number_input("주간 재생곡 수", 0, int(train.weekly_songs_played.max()), int(base.weekly_songs_played), key=f"{key_prefix}_songs")
+                record["weekly_unique_songs"] = st.number_input("주간 고유곡 수", 0, int(train.weekly_unique_songs.max()), int(base.weekly_unique_songs), key=f"{key_prefix}_unique")
+                record["num_favorite_artists"] = st.number_input("선호 아티스트 수", 0, int(train.num_favorite_artists.max()), int(base.num_favorite_artists), key=f"{key_prefix}_artists")
+            with c3:
+                record["num_platform_friends"] = st.number_input("플랫폼 친구 수", 0, int(train.num_platform_friends.max()), int(base.num_platform_friends), key=f"{key_prefix}_friends")
+                record["num_playlists_created"] = st.number_input("생성 플레이리스트 수", 0, int(train.num_playlists_created.max()), int(base.num_playlists_created), key=f"{key_prefix}_playlists")
+                record["num_shared_playlists"] = st.number_input("공유 플레이리스트 수", 0, int(train.num_shared_playlists.max()), int(base.num_shared_playlists), key=f"{key_prefix}_shared")
+            submitted = st.form_submit_button("위험 점수 다시 계산", type="primary", width="stretch")
+
+        row = pd.DataFrame([record], columns=tables["metadata"]["input_columns"])
+        probability = float(model.predict_proba(row)[:, 1][0])
+        label, css_class = risk_level(probability, tables["scenarios"])
+        selected = probability >= float(scenario["threshold"])
+        st.markdown('<div class="section-label">재계산 결과</div>', unsafe_allow_html=True)
+        r1, r2, r3, r4 = st.columns(4)
+        with r1:
+            metric_card("이탈 위험 점수", f"{probability:.1%}", "저장된 CatBoost 재추론")
+        with r2:
+            st.markdown(f'<div class="metric-card"><div class="metric-label">위험 구간</div><div style="margin-top:16px"><span class="{css_class}">{label}</span></div></div>', unsafe_allow_html=True)
+        with r3:
+            metric_card("현재 시나리오", str(scenario["scenario_label"]), f"Threshold {float(scenario['threshold']):.2f}")
+        with r4:
+            metric_card("검토 대상 포함", "예" if selected else "아니오", "자동 접촉이 아닌 목록 포함 여부")
+        contexts = input_context(record, train)
+        st.markdown(
+            '<div class="note-card"><b>진단 맥락</b><br>' + " · ".join(html.escape(item) for item in contexts) +
+            '<br><span class="small">이는 개인 단위 원인 설명이나 SHAP 값이 아니라, EDA와 전역 중요도에 근거한 검토 맥락입니다.</span></div>',
+            unsafe_allow_html=True,
+        )
+        strategy_review_panel(record, probability, tables, scenario)
+        if submitted:
+            st.success("수정한 입력값으로 위험 점수를 다시 계산했습니다.")
+
+    with batch_tab:
+        threshold = st.slider("배치 최소 위험 점수", 0.0, 1.0, float(scenario["threshold"]), .01)
+        queue = tables["strategy_queue"]
+        filtered = queue.loc[queue["churn_probability"].ge(threshold)].copy()
+        filtered["selected_action"] = "담당자 미검토"
+        filtered["operating_scenario"] = str(scenario["scenario_label"])
+        filtered["external_action_executed"] = False
+        c1, c2, c3 = st.columns(3)
+        c1.metric("검토 고객", f"{len(filtered):,}명")
+        c2.metric("전체 대비", f"{len(filtered) / len(queue):.1%}")
+        c3.metric("평균 위험 점수", f"{filtered['churn_probability'].mean():.1%}" if len(filtered) else "-")
+        if not filtered.empty:
+            segment_col, tier_col = st.columns(2)
+            with segment_col:
+                segment_counts = filtered["strategy_segment"].value_counts().rename_axis("전략 세그먼트").reset_index(name="고객 수")
+                fig = px.bar(segment_counts, x="고객 수", y="전략 세그먼트", orientation="h", text="고객 수")
+                fig.update_traces(marker_color=COLORS["orange"])
+                fig.update_layout(title="검토 큐의 전략 세그먼트", xaxis_title="고객 수", yaxis_title=None)
+                st.plotly_chart(plot_style(fig, 340), width="stretch")
+            with tier_col:
+                tier_counts = filtered["campaign_tier"].value_counts().rename_axis("운영 단계").reset_index(name="고객 수")
+                fig = px.pie(tier_counts, names="운영 단계", values="고객 수", hole=.58, color="운영 단계",
+                             color_discrete_map={"집중 관리": COLORS["orange"], "자동화 검토": COLORS["blue"], "관찰 유지": COLORS["green"]})
+                fig.update_layout(title="운영 단계 구성", showlegend=True)
+                st.plotly_chart(plot_style(fig, 340), width="stretch")
+        st.markdown('<div class="section-label">고객별 전략 검토 표</div>', unsafe_allow_html=True)
+        control_left, control_right = st.columns([1.2, 1])
+        with control_left:
+            queue_view_mode = st.radio(
+                "표시 방식",
+                ["운영 단계·세그먼트 대표 보기", "위험 점수 순"],
+                horizontal=True,
+                help="위험 점수 순은 최상위 고객 특성이 유사해 여러 컬럼이 반복될 수 있습니다.",
+            )
+        with control_right:
+            available_segments = filtered["strategy_segment"].drop_duplicates().tolist()
+            selected_segments = st.multiselect("전략 세그먼트 필터", available_segments, default=available_segments)
+        view_source = filtered.loc[filtered["strategy_segment"].isin(selected_segments)].copy()
+        if queue_view_mode == "운영 단계·세그먼트 대표 보기":
+            rows_per_segment = st.slider("운영 단계·세그먼트 조합별 표시 고객 수", 5, 100, 25, 5)
+            view_source["_representative_rank"] = view_source.groupby(
+                ["campaign_tier", "strategy_segment"], sort=False
+            ).cumcount()
+            table_rows = view_source.loc[view_source["_representative_rank"].lt(rows_per_segment)].sort_values(
+                ["_representative_rank", "campaign_tier", "strategy_segment"]
+            )
         else:
-            x, y, full_net = curve_arrays(sub_df)
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="순이익", line=dict(color="#2a78d6", width=3)))
-            if marker_n and marker_n > 0:
-                fig.add_trace(go.Scatter(x=[marker_n / group_pool * 100], y=[full_net[marker_n - 1]], mode="markers", name="현재 배정 위치", marker=dict(size=11, color="#2a78d6")))
-        fig.update_layout(height=340, xaxis_title="연락 범위 (그룹 내 상위 %)", yaxis_title="순이익 (백만원)")
-        return plotly_theme(fig)
+            table_rows = view_source.head(1000)
 
-    tabs = st.tabs(["전체(선택)"] + plan_list)
-    with tabs[0]:
-        st.plotly_chart(group_figure(work, pool, n_sel), width="stretch")
-        st.markdown('<div class="small-caption">산식에 포함된 요금제 합계 기준 — 기대이익 순 배정.</div>', unsafe_allow_html=True)
-    for i, p in enumerate(plan_list, start=1):
-        with tabs[i]:
-            sub = base[base["plan"] == p].copy()
-            sub["cost"] = float(cfg.loc[p, "접촉 비용(원)"])
-            sub["ltv"] = float(cfg.loc[p, "고객 가치(원/년)"])
-            sub = sub.sort_values("prob", ascending=False).reset_index(drop=True)
-            marker = int((sel["plan"] == p).sum()) if p in included else 0
-            st.plotly_chart(group_figure(sub, len(sub), marker), width="stretch")
-            note = f"{p} — 대상 {len(sub):,}명, 기대 이탈자 {sub['prob'].sum():,.0f}명, 현재 배정 {marker:,}명."
-            if p not in included:
-                note += " (현재 산식에서 제외됨 — 곡선은 참고용)"
-            st.markdown(f'<div class="small-caption">{note}</div>', unsafe_allow_html=True)
+        display_columns = [
+            "customer_id", "churn_probability", "campaign_tier", "strategy_segment",
+            "risk_signal_count", "primary_signal", "primary_action", "alternative_action",
+            "validation_kpi", "evidence_level",
+        ]
+        display = table_rows[display_columns].rename(columns={
+            "customer_id": "고객 ID", "churn_probability": "위험 점수", "campaign_tier": "운영 단계",
+            "strategy_segment": "전략 세그먼트", "risk_signal_count": "신호 수", "primary_signal": "1차 신호",
+            "primary_action": "1순위 행동 후보", "alternative_action": "대안 행동", "validation_kpi": "검증 KPI",
+            "evidence_level": "근거 수준",
+        })
+        st.caption(
+            f"현재 표 {len(display):,}명 · 운영 단계 {display['운영 단계'].nunique()}개 · "
+            f"전략 세그먼트 {display['전략 세그먼트'].nunique()}개 · 1차 신호 {display['1차 신호'].nunique()}개 · "
+            f"1순위 행동 {display['1순위 행동 후보'].nunique()}개"
+        )
+        st.dataframe(display, hide_index=True, width="stretch")
+        st.download_button("전략 포함 검토 큐 CSV 다운로드", filtered.to_csv(index=False).encode("utf-8-sig"), "catboost_retention_strategy_queue.csv", "text/csv")
+
+        st.caption("행동 후보는 자동 실행되지 않으며 모든 행의 selected_action은 담당자 미검토 상태로 내려받습니다. test 데이터에는 정답 라벨이 없습니다.")
+
+    with planning_tab:
+        campaign_planning_panel(test, tables["strategy_queue"], scenario)
+
+    boundary_note()
 
 
-def main():
-    (train, test), model, (comparison, threshold, metadata, predictions, importance) = safe_load()
+def main() -> None:
+    tables, model = load_workspace()
+    metadata = tables["metadata"]
+    scenarios = tables["scenarios"]
     with st.sidebar:
         st.markdown('<div class="brand"><span class="brand-mark">♫</span><span class="brand-name">PlaylistPro</span></div>', unsafe_allow_html=True)
-        st.caption("Insight workspace")
-        page = st.radio("Workspace", ["Overview", "Data Explorer", "Model Lab", "Customer Scoring", "Batch Prioritization", "Campaign Simulator"], label_visibility="collapsed")
+        st.markdown('<div class="sidebar-kicker">Decision workspace</div>', unsafe_allow_html=True)
+        page = st.radio(
+            "메뉴",
+            ["프로젝트 요약", "데이터·고객 인사이트", "개선 실험", "모델 선정", "운영 시나리오", "고객 우선순위"],
+            label_visibility="collapsed",
+        )
         st.divider()
-        st.markdown(f"**Model**  `{metadata['model']}`")
-        st.markdown(f"**Threshold**  `{metadata['validation_threshold']:.2f}`")
-        st.markdown("<div class='small-caption'>Dataset-label score<br>30-day horizon unverified</div>", unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-kicker">Operating policy</div>', unsafe_allow_html=True)
+        scenario_ids = scenarios["scenario_id"].tolist()
+        default_id = metadata.get("app_default_scenario_id", "balanced_f1")
+        scenario_id = st.selectbox(
+            "검토 시나리오",
+            scenario_ids,
+            index=scenario_ids.index(default_id) if default_id in scenario_ids else 0,
+            format_func=lambda value: str(selected_scenario(scenarios, value)["scenario_label"]),
+        )
+        chosen = selected_scenario(scenarios, scenario_id)
+        st.caption(f"Threshold {float(chosen['threshold']):.2f} · OOF 대상 {float(chosen['oof_target_rate']):.1%}")
+        st.divider()
+        st.markdown("**현재 모델** · CatBoost")
+        st.caption("SHA-256 무결성 검증 후 로드\n\n화면에서 재학습하지 않음")
 
-    if page == "Overview":
-        overview_page(train, test, comparison, metadata, predictions)
-    elif page == "Data Explorer":
-        eda_page(train)
-    elif page == "Model Lab":
-        model_page(comparison, threshold, metadata, importance)
-    elif page == "Customer Scoring":
-        prediction_page(train, model, metadata)
-    elif page == "Batch Prioritization":
-        batch_page(predictions, metadata)
+    scenario = selected_scenario(scenarios, scenario_id)
+    if page == "프로젝트 요약":
+        project_summary_page(tables, scenario)
+    elif page == "데이터·고객 인사이트":
+        customer_insights_page(tables)
+    elif page == "개선 실험":
+        improvement_page(tables)
+    elif page == "모델 선정":
+        model_comparison_page(tables)
+    elif page == "운영 시나리오":
+        operations_page(tables, scenario)
     else:
-        simulator_page(test, predictions, metadata)
+        prioritization_page(tables, model, scenario)
 
 
 if __name__ == "__main__":
