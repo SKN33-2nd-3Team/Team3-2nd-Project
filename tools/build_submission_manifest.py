@@ -13,7 +13,7 @@ from tools.submission_hashing import canonical_file_info
 
 INCLUDE_FILES = {
     ".gitattributes", "README.md", "requirements.txt", "models/churn_pipeline.joblib",
-    "data/train.csv", "data/test.csv",
+    "data/train.csv", "data/test.csv", "data/LICENSE.md",
     "artifacts/feature_schema.json", "artifacts/model_metadata.json",
     "artifacts/metrics.csv", "artifacts/requirements_traceability.csv",
     "artifacts/model/music_churn_pipeline.joblib", "artifacts/model/metadata.json",

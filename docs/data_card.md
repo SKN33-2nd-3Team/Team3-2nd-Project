@@ -9,7 +9,7 @@
 |---|---|
 | **출처** | [Streaming Subscription Churn Model — Kaggle Community Prediction Competition](https://www.kaggle.com/competitions/streaming-subscription-churn-model/data) (주최 Michael O'Donnell, 약 2년 전 개최, 현재 Late Submission 상태) |
 | **다운로드 날짜** | **2026-07-21 약 15:00** (팀원 확인 + 로컬 파일 타임스탬프 15:11로 교차 검증) |
-| **라이선스** | **MIT** (캐글 페이지 Metadata 표기). 단, 원본 다운로드에는 competition rules 동의가 필요하다 |
+| **라이선스** | **MIT** (Kaggle Data 페이지에서 2026-07-23 재확인). 연결된 전문과 출처는 [`data/LICENSE.md`](../data/LICENSE.md)에 수록 |
 | **데이터 단위** | 고객 1명 = 1행. `customer_id` 고유값 = 행 수로 검증 완료 |
 | **키** | `customer_id`. train 1 ~ 125,000 / test 200,000 ~ 274,999, **교집합 0건** |
 | **Target** | `churned` — 대회가 **기존 컬럼으로 제공**. 팀이 생성한 파생 라벨이 아님. 공식 정의 "0 = active, 1 = churned" |

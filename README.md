@@ -20,7 +20,7 @@
 10. [설치 및 실행](#10-설치-및-실행)
 11. [수행 화면과 제출 문서](#11-수행-화면과-제출-문서)
 12. [한계 및 개선 방향](#12-한계-및-개선-방향)
-13. [회고와 제출 전 확인](#13-회고와-제출-전-확인)
+13. [회고와 제출 관리](#13-회고와-제출-관리)
 
 ## 1. 팀 소개
 
@@ -129,10 +129,10 @@ SKN 33기 2차 프로젝트 3팀
 | Test | 75,000행 × 19열, 정답 라벨 없음 |
 | 키 | `customer_id`, Train/Test 교집합 0건 |
 | 관측 Target 비율 | 64,174 / 125,000 = 51.34% |
-| 이용 조건 | Late Submission을 통한 다운로드와 재배포 허가는 별개이며, Competition Rules 동의 및 최종 제출 범위 확인 필요 |
+| 라이선스 | Kaggle Data 페이지에 MIT로 표시, [데이터 라이선스 고지](data/LICENSE.md) 포함 |
 | 실제·합성 | 공식 표기는 확인되지 않았으나 분포·문턱값·계수 복원 결과 규칙 기반 합성으로 판정 |
 
-파일 출처·SHA-256·공식 설명과 실제 값의 불일치는 [docs/data_source.md](docs/data_source.md)와 [docs/data_card.md](docs/data_card.md)에 기록했습니다.
+파일 출처·SHA-256·공식 설명과 실제 값의 불일치는 [docs/data_source.md](docs/data_source.md)와 [docs/data_card.md](docs/data_card.md)에 기록했습니다. 데이터 파일은 Kaggle이 연결한 MIT 조건에 따라 공개하며, 연결된 라이선스 전문과 출처를 [data/LICENSE.md](data/LICENSE.md)에 포함했습니다.
 
 ### Target 분포
 
@@ -399,7 +399,7 @@ streamlit run app/streamlit_app.py
 
 ### 데이터 준비
 
-`data/train.csv`와 `data/test.csv`는 Kaggle 대회 페이지에서 Late Submission을 제출한 뒤 받은 파일입니다. 파일 출처와 SHA-256은 [데이터 출처 문서](docs/data_source.md)를 확인합니다. Late Submission을 통한 다운로드와 제3자 재배포 허가는 동일하지 않으므로, 외부 배포 전에는 Competition Rules를 다시 확인해야 합니다.
+`data/train.csv`와 `data/test.csv`는 Kaggle 대회 페이지에서 Late Submission을 제출한 뒤 받은 파일입니다. Kaggle Data 페이지에는 라이선스가 MIT로 표시되어 있으며, 데이터셋명·출처 URL·연결된 라이선스 전문을 [data/LICENSE.md](data/LICENSE.md)에 수록했습니다. 파일 출처와 SHA-256은 [데이터 출처 문서](docs/data_source.md)를 확인합니다.
 
 ### 검증
 
@@ -451,9 +451,8 @@ python tools/validate_streamlit.py
 | 독립 외부 라벨 Holdout 없음 | 외부 일반화 확인 불가 | 시간 이후 Holdout 1회 평가 |
 | Feature 중요도는 연관성 | 이탈 원인·개입 효과로 단정 불가 | 도메인 검토와 통제 실험 |
 | 유지 활동 효과 미검증 | Uplift·ROI 주장 불가 | 행동별 A/B 테스트 |
-| 라이선스·업무 적합성 최종 승인 미완료 | 외부 배포 판단 필요 | 담당 조직·강사 최종 확인 |
 
-## 13. 회고와 제출 전 확인
+## 13. 회고와 제출 관리
 
 ### 팀원 회고
 
@@ -487,22 +486,8 @@ python tools/validate_streamlit.py
 
 이번 프로젝트를 통해 머신러닝 학습의 전 과정을 직접 수행하며 전체적인 흐름과 핵심 개념을 구체적으로 이해할 수 있었습니다. 진행 과정에서 다양한 이슈를 마주했지만, 이를 하나씩 해결해 나가는 과정 자체가 새로운 요소를 배우고 실무적인 대응 경험을 쌓을 수 있었던 값진 시간이었습니다.
 
-### 제출 전 확인
+### 제출 관리
 
-- [x] 모든 팀원의 GitHub 계정을 연결했습니다.
-- [x] 데이터 출처와 취득 방법을 작성했습니다.
-- [x] Target과 예측 시점의 한계를 명시했습니다.
-- [x] 핵심 EDA마다 관찰·활용·단정할 수 없는 내용을 작성했습니다.
-- [x] 동일한 Fold에서 기준 모델과 8개 모델을 비교했습니다.
-- [x] 개선되지 않은 Feature 실험도 판단 근거와 함께 기록했습니다.
-- [x] 최종 모델과 Threshold를 OOF 근거로 선택했습니다.
-- [x] 라벨 없는 Test를 최종 성능 평가에 사용하지 않았습니다.
-- [x] 저장된 모델과 Streamlit의 연결 경로를 명시했습니다.
-- [x] README의 성능 수치를 집계 산출물과 대조했습니다.
-- [x] 팀원 4명의 최종 회고를 반영했습니다.
-- [ ] Kaggle Competition Rules에 따른 데이터 재배포 범위를 최종 확인해야 합니다.
-- [ ] 완전히 새로운 환경에서 README 순서대로 실행되는지 최종 확인해야 합니다.
-
-기술적으로 확인 가능한 상세 항목은 [docs/final_submission_checklist.md](docs/final_submission_checklist.md)에 기록했습니다. 팀원별 회고, 최종 제출 계정, 데이터 이용 승인처럼 사람이 확인해야 하는 항목은 [docs/human_confirmation_required.md](docs/human_confirmation_required.md)에 분리했습니다.
+제출 전 확인 항목과 진행 상태는 [GitHub Issue #19](https://github.com/SKN33-2nd-3Team/Team3-2nd-Project/issues/19)에서 관리합니다. 기술 검증의 상세 근거는 [docs/final_submission_checklist.md](docs/final_submission_checklist.md), 사람이 최종 결정해야 하는 항목은 [docs/human_confirmation_required.md](docs/human_confirmation_required.md)에 분리했습니다.
 
 이 프로젝트의 예측과 행동 제안은 담당자의 의사결정을 보조하며, 고객에 대한 자동 조치나 실제 캠페인 효과를 보장하지 않습니다.

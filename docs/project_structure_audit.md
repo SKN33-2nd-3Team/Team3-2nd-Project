@@ -53,8 +53,7 @@
 
 ### 사람이 최종 확인해야 하는 차이
 
-- 팀원별 정확한 역할과 회고
-- Kaggle Competition Rules에 따른 CSV 재배포 허용 여부
+- 팀원별 역할과 회고의 최종 검토
 - 실제 사업 Threshold와 유지 활동 승인
 - Google Drive 업로드와 GitHub Push
 

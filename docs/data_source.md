@@ -17,13 +17,9 @@
 
 ## 라이선스와 재배포
 
-프로젝트 조사 당시 Kaggle metadata에는 MIT가 표시된 것으로 기록되어 있습니다. 다만 대회 데이터 다운로드에는 Competition Rules 동의가 요구될 수 있으며, 이 저장소 분석만으로 법적 재배포 가능성을 최종 승인할 수는 없습니다.
+로그인한 Kaggle Data 페이지에서 이 데이터셋의 License가 **MIT**로 표시되고, [MIT 라이선스 전문](https://www.mit.edu/~amini/LICENSE.md)으로 연결되는 것을 2026-07-23 재확인했습니다. 저장소의 [data/LICENSE.md](../data/LICENSE.md)에 데이터셋명·출처 URL과 Kaggle이 연결한 전문을 수정 없이 수록했습니다.
 
-따라서 제출 전 담당자는 다음을 직접 확인해야 합니다.
-
-1. 로그인한 Kaggle 계정에서 현재 Rules와 License 표시를 재확인합니다.
-2. 교육기관 Google Drive와 GitHub에 원본 CSV를 포함할 수 있는지 확인합니다.
-3. 허용되지 않으면 CSV를 제외하고 다운로드 방법·해시·스키마만 제출합니다.
+Competition Rules 수락은 Late Submission을 통한 접근 절차이며, 라이선스 표시는 데이터 이용 조건에 관한 별도 고지입니다. 이 저장소는 두 근거를 구분해 기록하며, Kaggle이나 프로젝트 팀을 데이터 저작권자로 새롭게 지정하지 않습니다.
 
 ## 실제·합성 판정
 

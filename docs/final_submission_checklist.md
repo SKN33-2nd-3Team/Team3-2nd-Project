@@ -29,8 +29,8 @@
 
 ## 제출 담당자가 직접 확인
 
-- [ ] 팀명·팀원별 역할·회고 최종 승인
-- [ ] Kaggle Competition Rules와 데이터 재배포 허용 여부 확인
+- [x] 팀명·팀원별 역할·회고 반영
+- [x] Kaggle Data 페이지의 MIT 표시 확인 및 `data/LICENSE.md` 고지 포함
 - [ ] 강사에게 제출할 Google Drive 폴더와 파일명 확인
 - [ ] 실제 사업 Threshold를 기술 권고와 구분해 발표
 - [ ] 캠페인 효과·ROI를 검증 결과로 오해할 표현이 없는지 최종 리허설
