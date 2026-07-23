@@ -191,7 +191,7 @@ Team3-2nd-Project/
 └── submission_manifest.json
 ```
 
-`src/legacy/run_holdout_pipeline.py`는 초기 Holdout·Gradient Boosting 실험을 보존한 레거시 코드입니다. 최종 CatBoost 학습 계보는 `scripts/run_full_fair_comparison.py` → `scripts/finalize_full_fair_candidate.py` → `scripts/promote_full_fair_candidate.py`입니다.
+`src/legacy/run_holdout_pipeline.py`는 초기 Holdout·Gradient Boosting 실험을 보존한 레거시 코드입니다. 최종 CatBoost 학습 계보는 `scripts/run_full_fair_comparison.py` → `scripts/build_full_oof_diagnostics.py` → `scripts/finalize_full_fair_candidate.py` → `scripts/promote_full_fair_candidate.py`입니다.
 
 ## 9. 기술 스택
 

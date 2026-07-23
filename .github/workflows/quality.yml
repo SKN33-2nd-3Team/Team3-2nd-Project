@@ -42,4 +42,7 @@ jobs:
           python -c "from src.retention_strategy import recommend_retention_strategy"
 
       - name: Verify committed artifact contracts
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+        run: python -m pytest -q
+
+      - name: Validate submission package
+        run: python tools/validate_submission.py

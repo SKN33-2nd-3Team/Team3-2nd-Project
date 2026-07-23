@@ -49,6 +49,7 @@
 ```bash
 pip install -r requirements.txt
 python scripts/run_full_fair_comparison.py
+python scripts/build_full_oof_diagnostics.py
 python scripts/finalize_full_fair_candidate.py
 python scripts/promote_full_fair_candidate.py
 streamlit run app/streamlit_app.py
